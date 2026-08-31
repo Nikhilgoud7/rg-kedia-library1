@@ -1,0 +1,158 @@
+// R.G. Kedia College of Commerce - Library Management System
+// Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ──────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(uuid())
+  name           String
+  email          String   @unique
+  password       String
+  role           String   @default("STUDENT") // STUDENT | TEACHER | LIBRARIAN
+  rollNumber     String?  @unique
+  program        String?  // BCOM | BBA | BSC
+  branch         String?  // e.g., "General", "Computer Applications", etc.
+  year           Int?     // 1, 2, or 3
+  semester       Int?     // 1-6
+  secondLanguage String?  // TELUGU | SANSKRIT | ARABIC | HINDI
+  phone          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lendings           Lending[]
+  bookRequests       BookRequest[]
+  examPapersUploaded ExamPaper[]
+  notifications      Notification[]
+}
+
+// ─── Books ──────────────────────────────────────────────
+
+model Book {
+  id              String   @id @default(uuid())
+  title           String
+  author          String
+  isbn            String?
+  publisher       String?
+  edition         String?
+  publicationYear Int?
+  category        String   @default("TEXTBOOK") // TEXTBOOK | REFERENCE | GENERAL | LANGUAGE | JOURNAL
+  segment         String   // e.g., "Accounting", "Statistics", "English Literature"
+  description     String?
+  totalCopies     Int      @default(1)
+  availableCopies Int      @default(1)
+  shelfLocation   String?  // e.g., "A-3-12" (Rack A, Shelf 3, Position 12)
+  coverImage      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  copies       BookCopy[]
+  requests     BookRequest[]
+  bookPrograms BookProgram[]
+}
+
+// Maps books to programs/branches they're relevant for
+model BookProgram {
+  id      String  @id @default(uuid())
+  bookId  String
+  program String  // BCOM | BBA | BSC
+  branch  String? // specific branch or null for all branches in program
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, program, branch])
+}
+
+// Individual physical copies of a book
+model BookCopy {
+  id         String @id @default(uuid())
+  bookId     String
+  copyNumber Int
+  condition  String @default("Good") // Good | Fair | Poor | Damaged
+  status     String @default("AVAILABLE") // AVAILABLE | ISSUED | RESERVED | LOST | DAMAGED
+  barcode    String? @unique
+
+  book     Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  lendings Lending[]
+
+  @@unique([bookId, copyNumber])
+}
+
+// ─── Lending System ─────────────────────────────────────
+
+model Lending {
+  id           String    @id @default(uuid())
+  userId       String
+  bookCopyId   String
+  issuedDate   DateTime  @default(now())
+  dueDate      DateTime
+  returnedDate DateTime?
+  status       String    @default("ISSUED") // ISSUED | RETURNED | OVERDUE
+  fine         Float     @default(0)
+  issuedById   String?   // Librarian who issued
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  bookCopy BookCopy @relation(fields: [bookCopyId], references: [id])
+}
+
+model BookRequest {
+  id             String   @id @default(uuid())
+  userId         String
+  bookId         String
+  type           String   // BORROW | RETURN_REQUEST
+  status         String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  message        String?
+  responseMessage String?
+  respondedById  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+  book Book @relation(fields: [bookId], references: [id])
+}
+
+// ─── Exam Guide ─────────────────────────────────────────
+
+model ExamPaper {
+  id           String   @id @default(uuid())
+  title        String
+  subject      String
+  program      String   // BCOM | BBA | BSC
+  branch       String   // specific branch
+  year         Int      // academic year (e.g., 2024)
+  semester     Int      // 1-6
+  type         String   // PREVIOUS_YEAR | IMPORTANT_QUESTIONS | STUDY_GUIDE
+  fileUrl      String   // path to uploaded file
+  description  String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // INFO | WARNING | OVERDUE | REQUEST | APPROVAL
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}

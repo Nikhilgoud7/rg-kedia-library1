@@ -1,0 +1,450 @@
+import React, { useState, useEffect } from 'react';
+import api from '../../lib/api';
+import { Book, Program } from '../../types';
+import Modal from '../../components/common/Modal';
+import { Plus, Search, Filter, Trash2, Edit, BookOpen, CheckCircle, MapPin, Tag } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+export const ManageBooks: React.FC = () => {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [search, setSearch] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState<string>('');
+  const [selectedSegment, setSelectedSegment] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  // Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [currentBook, setCurrentBook] = useState<Book | null>(null);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    title: '',
+    author: '',
+    isbn: '',
+    publisher: '',
+    edition: '',
+    publicationYear: new Date().getFullYear(),
+    category: 'TEXTBOOK',
+    segment: 'Accounting & Finance',
+    description: '',
+    totalCopies: 5,
+    shelfLocation: 'Rack A-1',
+    programs: [
+      { program: 'BCOM', branch: 'General' },
+    ],
+  });
+
+  const fetchBooks = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/books', {
+        params: {
+          search: search || undefined,
+          program: selectedProgram || undefined,
+          segment: selectedSegment || undefined,
+        },
+      });
+      setBooks(res.data.books || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to fetch books');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBooks();
+  }, [selectedProgram, selectedSegment]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchBooks();
+  };
+
+  const handleCreateBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/books', formData);
+      toast.success('Book created successfully with individual physical copies!');
+      setIsAddModalOpen(false);
+      fetchBooks();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to create book');
+    }
+  };
+
+  const handleDeleteBook = async (id: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
+    try {
+      await api.delete(`/books/${id}`);
+      toast.success('Book deleted successfully');
+      fetchBooks();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to delete book');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Book Inventory Management</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Maintain college library book stock, shelf placements, and copy availability
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setFormData({
+              title: '',
+              author: '',
+              isbn: '',
+              publisher: '',
+              edition: '',
+              publicationYear: 2024,
+              category: 'TEXTBOOK',
+              segment: 'Accounting & Finance',
+              description: '',
+              totalCopies: 5,
+              shelfLocation: 'Rack A-1',
+              programs: [{ program: 'BCOM', branch: 'General' }],
+            });
+            setIsAddModalOpen(true);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add New Book Title</span>
+        </button>
+      </div>
+
+      {/* Filters and Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex-1 w-full flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search by title, author, ISBN, or subject..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+          >
+            Search
+          </button>
+        </form>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Program filter */}
+          <select
+            value={selectedProgram}
+            onChange={(e) => setSelectedProgram(e.target.value)}
+            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 font-medium"
+          >
+            <option value="">All Programs</option>
+            <option value="BCOM">B.Com (All branches)</option>
+            <option value="BBA">BBA</option>
+            <option value="BSC">B.Sc</option>
+          </select>
+
+          {/* Segment filter */}
+          <select
+            value={selectedSegment}
+            onChange={(e) => setSelectedSegment(e.target.value)}
+            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 font-medium"
+          >
+            <option value="">All Segments</option>
+            <option value="Accounting & Finance">Accounting & Finance</option>
+            <option value="Statistics & Analytics">Statistics & Analytics</option>
+            <option value="Computer Science & Data">Computer Science & Data</option>
+            <option value="Business & Management">Business & Management</option>
+            <option value="Mathematics">Mathematics</option>
+            <option value="Languages & Humanities">Languages & Humanities</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Books Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
+                <th className="py-3.5 px-4">Book Details</th>
+                <th className="py-3.5 px-4">Segment & Category</th>
+                <th className="py-3.5 px-4">Copies (Avail / Total)</th>
+                <th className="py-3.5 px-4">Shelf Location</th>
+                <th className="py-3.5 px-4">Curriculum Mapping</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    Loading book catalog...
+                  </td>
+                </tr>
+              ) : books.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    No books found matching criteria
+                  </td>
+                </tr>
+              ) : (
+                books.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-50 transition">
+                    <td className="py-3.5 px-4 max-w-xs">
+                      <div className="font-bold text-slate-900 text-sm leading-snug">{b.title}</div>
+                      <div className="text-slate-500 mt-0.5 font-medium">by {b.author}</div>
+                      {b.isbn && <div className="text-[10px] text-slate-400 font-mono mt-0.5">ISBN: {b.isbn}</div>}
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span className="font-semibold text-slate-800 block">{b.segment}</span>
+                      <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                        {b.category}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-black text-sm ${
+                            b.availableCopies > 0 ? 'text-emerald-600' : 'text-red-600'
+                          }`}
+                        >
+                          {b.availableCopies}
+                        </span>
+                        <span className="text-slate-400">/</span>
+                        <span className="font-bold text-slate-700">{b.totalCopies}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {b.totalCopies - b.availableCopies} currently issued
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">
+                        <MapPin className="w-3 h-3 text-amber-500" />
+                        {b.shelfLocation || 'Unassigned'}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 max-w-xs">
+                      <div className="flex flex-wrap gap-1">
+                        {b.bookPrograms?.map((bp, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.5 rounded"
+                          >
+                            {bp.program} {bp.branch ? `(${bp.branch})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleDeleteBook(b.id, b.title)}
+                          title="Delete book"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add Book Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add New Book to College Catalog"
+        maxWidth="2xl"
+      >
+        <form onSubmit={handleCreateBook} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Book Title *</label>
+              <input
+                type="text"
+                required
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="e.g. Cost Accounting"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 font-medium"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Author(s) *</label>
+              <input
+                type="text"
+                required
+                value={formData.author}
+                onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                placeholder="e.g. S.P. Jain & K.L. Narang"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">ISBN Number</label>
+              <input
+                type="text"
+                value={formData.isbn}
+                onChange={(e) => setFormData({ ...formData, isbn: e.target.value })}
+                placeholder="e.g. 978-9352994786"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Publisher</label>
+              <input
+                type="text"
+                value={formData.publisher}
+                onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
+                placeholder="e.g. Kalyani Publishers"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Edition</label>
+              <input
+                type="text"
+                value={formData.edition}
+                onChange={(e) => setFormData({ ...formData, edition: e.target.value })}
+                placeholder="e.g. 14th Edition"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Segment / Subject *</label>
+              <select
+                value={formData.segment}
+                onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium"
+              >
+                <option value="Accounting & Finance">Accounting & Finance</option>
+                <option value="Statistics & Analytics">Statistics & Analytics</option>
+                <option value="Computer Science & Data">Computer Science & Data</option>
+                <option value="Business & Management">Business & Management</option>
+                <option value="Mathematics">Mathematics</option>
+                <option value="Languages & Humanities">Languages & Humanities</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Category</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium"
+              >
+                <option value="TEXTBOOK">Textbook</option>
+                <option value="REFERENCE">Reference Guide</option>
+                <option value="GENERAL">General Reading</option>
+                <option value="LANGUAGE">Language Text</option>
+                <option value="JOURNAL">Research Journal</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Initial Physical Copies *</label>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                required
+                value={formData.totalCopies}
+                onChange={(e) => setFormData({ ...formData, totalCopies: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Shelf Location in Library</label>
+              <input
+                type="text"
+                value={formData.shelfLocation}
+                onChange={(e) => setFormData({ ...formData, shelfLocation: e.target.value })}
+                placeholder="e.g. Rack A-3 (Commerce)"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Program & Branch Relevance</label>
+              <select
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'BCOM_ALL') {
+                    setFormData({ ...formData, programs: [{ program: 'BCOM', branch: 'General' }, { program: 'BCOM', branch: 'Computer Applications' }] });
+                  } else if (val === 'BBA') {
+                    setFormData({ ...formData, programs: [{ program: 'BBA', branch: 'General Business Administration' }] });
+                  } else if (val === 'BSC') {
+                    setFormData({ ...formData, programs: [{ program: 'BSC', branch: 'Computer Science & Data' }] });
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+              >
+                <option value="BCOM_ALL">B.Com (Commerce / Comp App / Analytics)</option>
+                <option value="BBA">BBA (Business Administration)</option>
+                <option value="BSC">B.Sc (Maths / Stats / CS)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Syllabus Overview / Notes</label>
+            <textarea
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Brief syllabus units covered in this textbook..."
+              className="w-full px-3 py-2 rounded-xl border border-slate-200"
+            />
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(false)}
+              className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl shadow-xs transition"
+            >
+              Save & Generate Copies
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+};
+
+export default ManageBooks;

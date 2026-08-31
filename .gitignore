@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-journal
+uploads/*
+!uploads/.gitkeep
+client/dist/
+client/node_modules/

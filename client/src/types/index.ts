@@ -1,0 +1,143 @@
+export type Role = 'STUDENT' | 'TEACHER' | 'LIBRARIAN';
+
+export type Program = 'BCOM' | 'BBA' | 'BSC';
+
+export type SecondLanguage = 'TELUGU' | 'SANSKRIT' | 'ARABIC' | 'HINDI';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  rollNumber?: string | null;
+  program?: Program | null;
+  branch?: string | null;
+  year?: number | null;
+  semester?: number | null;
+  secondLanguage?: SecondLanguage | null;
+  phone?: string | null;
+  active: boolean;
+  createdAt: string;
+  _count?: {
+    lendings?: number;
+  };
+}
+
+export interface BookProgram {
+  id: string;
+  bookId: string;
+  program: Program;
+  branch?: string | null;
+}
+
+export interface BookCopy {
+  id: string;
+  bookId: string;
+  copyNumber: number;
+  condition: string;
+  status: 'AVAILABLE' | 'ISSUED' | 'RESERVED' | 'LOST' | 'DAMAGED';
+  barcode?: string | null;
+  lendings?: Lending[];
+}
+
+export interface Book {
+  id: string;
+  title: string;
+  author: string;
+  isbn?: string | null;
+  publisher?: string | null;
+  edition?: string | null;
+  publicationYear?: number | null;
+  category: 'TEXTBOOK' | 'REFERENCE' | 'GENERAL' | 'LANGUAGE' | 'JOURNAL';
+  segment: string;
+  description?: string | null;
+  totalCopies: number;
+  availableCopies: number;
+  shelfLocation?: string | null;
+  coverImage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  copies?: BookCopy[];
+  bookPrograms?: BookProgram[];
+  _count?: {
+    copies?: number;
+    requests?: number;
+  };
+}
+
+export interface Lending {
+  id: string;
+  userId: string;
+  bookCopyId: string;
+  issuedDate: string;
+  dueDate: string;
+  returnedDate?: string | null;
+  status: 'ISSUED' | 'RETURNED' | 'OVERDUE';
+  fine: number;
+  issuedById?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  user?: User;
+  bookCopy?: BookCopy & {
+    book?: Book;
+  };
+}
+
+export interface BookRequest {
+  id: string;
+  userId: string;
+  bookId: string;
+  type: 'BORROW' | 'RETURN_REQUEST';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  message?: string | null;
+  responseMessage?: string | null;
+  respondedById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: User;
+  book?: Book;
+}
+
+export interface ExamPaper {
+  id: string;
+  title: string;
+  subject: string;
+  program: Program;
+  branch: string;
+  year: number;
+  semester: number;
+  type: 'PREVIOUS_YEAR' | 'IMPORTANT_QUESTIONS' | 'STUDY_GUIDE';
+  fileUrl: string;
+  description?: string | null;
+  uploadedById: string;
+  createdAt: string;
+  updatedAt: string;
+  uploadedBy?: {
+    name: string;
+    role: Role;
+  };
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'INFO' | 'WARNING' | 'OVERDUE' | 'REQUEST' | 'APPROVAL';
+  read: boolean;
+  link?: string | null;
+  createdAt: string;
+}
+
+export interface DashboardStats {
+  totalBooks: number;
+  totalCopies: number;
+  issuedCopies: number;
+  availableCopies: number;
+  totalUsers: number;
+  totalStudents: number;
+  totalTeachers: number;
+  pendingRequests: number;
+  overdueCount: number;
+  todayIssued: number;
+}
