@@ -18,13 +18,18 @@ export interface AuthRequest extends Request {
 // Verify JWT token and attach user to request
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token = req.cookies?.rg_kedia_token;
+
+    // Fallback to Authorization header for external API clients
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
       res.status(401).json({ error: 'Access denied. No token provided.' });
       return;
     }
 
-    const token = authHeader.split(' ')[1];
     const secret = process.env.JWT_SECRET || 'default-secret';
     const decoded = jwt.verify(token, secret) as { id: string };
 

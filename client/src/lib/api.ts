@@ -2,17 +2,15 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
+  withCredentials: true, // Send HttpOnly cookies automatically
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to attach JWT token
+// Request interceptor can be used for other headers if needed,
+// but we no longer attach the JWT from localStorage.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('rg_kedia_token');
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
   return config;
 });
 

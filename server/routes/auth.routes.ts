@@ -1,12 +1,30 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { rateLimit } from 'express-rate-limit';
 import prisma, { authenticate, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
+// Login rate limiting configuration: 10 attempts per IP per 15 minutes
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX = 10;
+
+// Account lockout configuration: 5 failed attempts locks for 15 minutes
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+const loginLimiter = rateLimit({
+  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+  max: LOGIN_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: { error: 'Too many login attempts from this IP. Please try again after 15 minutes.' },
+});
+
 // POST /api/auth/login
-router.post('/login', async (req, res: Response): Promise<void> => {
+router.post('/login', loginLimiter, async (req, res: Response): Promise<void> => {
   try {
     const { email, rollNumber, password } = req.body;
 
@@ -32,11 +50,50 @@ router.post('/login', async (req, res: Response): Promise<void> => {
       return;
     }
 
+    // Check account lockout status
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) {
+      res.status(401).json({ error: 'Invalid credentials.' });
+      return;
+    }
+
+    // If lockout has expired, reset expired lock state
+    if (user.lockedUntil && user.lockedUntil <= now) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lockedUntil: null, failedLoginAttempts: 0 },
+      });
+      user.lockedUntil = null;
+      user.failedLoginAttempts = 0;
+    }
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      const updatedAttempts = user.failedLoginAttempts + 1;
+      const shouldLock = updatedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: updatedAttempts,
+          lockedUntil: shouldLock ? new Date(Date.now() + ACCOUNT_LOCKOUT_DURATION_MS) : null,
+        },
+      });
+
       res.status(401).json({ error: 'Invalid credentials.' });
       return;
+    }
+
+    // Successful login: reset failed login attempts and lockout if needed
+    if (user.failedLoginAttempts > 0 || user.lockedUntil !== null) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
     }
 
     // Generate JWT
@@ -44,16 +101,33 @@ router.post('/login', async (req, res: Response): Promise<void> => {
     const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
     const token = jwt.sign({ id: user.id }, secret, { expiresIn: expiresIn as any });
 
-    // Return user info (without password)
-    const { password: _, ...userWithoutPassword } = user;
+    // Set HttpOnly cookie
+    res.cookie('rg_kedia_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // Return user info (without password, security counters, or token)
+    const { password: _, failedLoginAttempts: __, lockedUntil: ___, ...userWithoutPassword } = user;
     res.json({
-      token,
       user: userWithoutPassword,
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login.' });
   }
+});
+
+// POST /api/auth/logout - Clear auth cookie
+router.post('/logout', async (_req, res: Response): Promise<void> => {
+  res.clearCookie('rg_kedia_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  res.json({ message: 'Logged out successfully.' });
 });
 
 // POST /api/auth/register (Librarian creates accounts)
@@ -108,7 +182,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response): 
       },
     });
 
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: _, failedLoginAttempts: __, lockedUntil: ___, ...userWithoutPassword } = user;
     res.status(201).json({ user: userWithoutPassword });
   } catch (error) {
     console.error('Register error:', error);

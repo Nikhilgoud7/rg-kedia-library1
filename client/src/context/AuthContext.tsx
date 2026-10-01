@@ -4,10 +4,9 @@ import { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   loading: boolean;
   login: (credentials: { email?: string; rollNumber?: string; password: string }) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -19,23 +18,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('rg_kedia_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('rg_kedia_token');
-  });
   const [loading, setLoading] = useState<boolean>(true);
 
   const refreshProfile = async () => {
     try {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
       const response = await api.get('/auth/me');
       setUser(response.data.user);
       localStorage.setItem('rg_kedia_user', JSON.stringify(response.data.user));
     } catch (err) {
       console.error('Failed to refresh profile', err);
-      logout();
+      setUser(null);
+      localStorage.removeItem('rg_kedia_user');
     } finally {
       setLoading(false);
     }
@@ -43,37 +36,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshProfile();
-  }, [token]);
+  }, []);
 
   const login = async (credentials: { email?: string; rollNumber?: string; password: string }) => {
     const response = await api.post('/auth/login', credentials);
-    const { token: newToken, user: userData } = response.data;
+    const { user: userData } = response.data;
 
-    setToken(newToken);
     setUser(userData);
-    localStorage.setItem('rg_kedia_token', newToken);
     localStorage.setItem('rg_kedia_user', JSON.stringify(userData));
 
     return userData;
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('rg_kedia_token');
-    localStorage.removeItem('rg_kedia_user');
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.error('Logout API call failed', error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('rg_kedia_user');
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
         loading,
         login,
         logout,
         refreshProfile,
-        isAuthenticated: !!token && !!user,
+        isAuthenticated: !!user,
       }}
     >
       {children}
