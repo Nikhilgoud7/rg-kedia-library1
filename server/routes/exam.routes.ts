@@ -138,13 +138,19 @@ router.post('/papers', authenticate, authorize('TEACHER', 'LIBRARIAN'), upload.s
   }
 });
 
-// DELETE /api/exam/papers/:id - Delete paper (Librarian only)
-router.delete('/papers/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+// DELETE /api/exam/papers/:id - Delete paper (Librarian or Teacher who uploaded it)
+router.delete('/papers/:id', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const paper = await prisma.examPaper.findUnique({ where: { id: req.params.id } });
 
     if (!paper) {
       res.status(404).json({ error: 'Paper not found.' });
+      return;
+    }
+
+    // Teachers can only delete their own uploads
+    if (req.user!.role === 'TEACHER' && paper.uploadedById !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden: You can only delete papers you uploaded.' });
       return;
     }
 

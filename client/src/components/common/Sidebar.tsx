@@ -13,6 +13,9 @@ import {
   Sparkles,
   Layers,
   GraduationCap,
+  Bell,
+  UserCircle,
+  Settings,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -44,6 +47,9 @@ export const Sidebar: React.FC = () => {
           { to: '/student/browse', label: 'Browse & Borrow Books', icon: BookOpen },
           { to: '/student/borrowings', label: 'My Issued Books', icon: BookmarkCheck },
           { to: '/student/exam-guide', label: 'Exam Guide & QP Papers', icon: GraduationCap },
+          { to: '/student/notifications', label: 'Notifications', icon: Bell },
+          { to: '/student/profile', label: 'My Profile', icon: UserCircle },
+          { to: '/student/settings', label: 'Settings', icon: Settings },
         ];
     }
   };

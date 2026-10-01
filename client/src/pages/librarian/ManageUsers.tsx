@@ -2,27 +2,43 @@ import React, { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { User, Role, Program, SecondLanguage } from '../../types';
 import Modal from '../../components/common/Modal';
-import { Plus, Search, Users, Key, GraduationCap, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, Search, Users, Key, GraduationCap, ShieldCheck, CheckCircle2, XCircle, Pencil, BookMarked } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const ManageUsers: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [programFilter, setProgramFilter] = useState<string>('');
+  const [branchFilter, setBranchFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
 
-  // Form State
+  // Form State (New User)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: 'password123',
+    role: 'STUDENT' as Role,
+    rollNumber: '',
+    program: 'BCOM' as Program,
+    branch: 'General',
+    year: 1,
+    semester: 1,
+    secondLanguage: 'TELUGU' as SecondLanguage,
+    phone: '',
+  });
+
+  // Form State (Edit User)
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    email: '',
     role: 'STUDENT' as Role,
     rollNumber: '',
     program: 'BCOM' as Program,
@@ -40,6 +56,7 @@ export const ManageUsers: React.FC = () => {
         params: {
           role: roleFilter || undefined,
           program: programFilter || undefined,
+          branch: branchFilter || undefined,
           search: search || undefined,
         },
       });
@@ -54,7 +71,7 @@ export const ManageUsers: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [roleFilter, programFilter]);
+  }, [roleFilter, programFilter, branchFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +87,37 @@ export const ManageUsers: React.FC = () => {
       fetchUsers();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create user');
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setEditFormData({
+      name: user.name || '',
+      email: user.email || '',
+      role: user.role,
+      rollNumber: user.rollNumber || '',
+      program: (user.program as Program) || 'BCOM',
+      branch: user.branch || 'General',
+      year: user.year || 1,
+      semester: user.semester || 1,
+      secondLanguage: (user.secondLanguage as SecondLanguage) || 'TELUGU',
+      phone: user.phone || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    try {
+      await api.put(`/admin/users/${selectedUser.id}`, editFormData);
+      toast.success(`Member details updated for ${editFormData.name}!`);
+      setIsEditModalOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update user details');
     }
   };
 
@@ -151,7 +199,7 @@ export const ManageUsers: React.FC = () => {
           </button>
         </form>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
@@ -173,6 +221,22 @@ export const ManageUsers: React.FC = () => {
             <option value="BBA">BBA</option>
             <option value="BSC">B.Sc</option>
           </select>
+
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 font-medium"
+          >
+            <option value="">All Branches</option>
+            <option value="General">B.Com General</option>
+            <option value="Computer Applications">Computer Applications</option>
+            <option value="Business Analytics">Business Analytics</option>
+            <option value="Honors">B.Com Honors</option>
+            <option value="General Business Administration">General Business Administration</option>
+            <option value="Mathematics">B.Sc Mathematics</option>
+            <option value="Statistics">B.Sc Statistics</option>
+            <option value="Computer Science & Data">Computer Science & Data</option>
+          </select>
         </div>
       </div>
 
@@ -186,20 +250,21 @@ export const ManageUsers: React.FC = () => {
                 <th className="py-3.5 px-4">Role & Roll Number</th>
                 <th className="py-3.5 px-4">Program & Branch</th>
                 <th className="py-3.5 px-4">Second Language</th>
-                <th className="py-3.5 px-4">Contact</th>
+                <th className="py-3.5 px-4">Lendings</th>
+                <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Account Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Loading users directory...
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     No members found
                   </td>
                 </tr>
@@ -209,6 +274,7 @@ export const ManageUsers: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-slate-900 text-sm">{u.name}</div>
                       <div className="text-slate-500 font-medium">{u.email}</div>
+                      {u.phone && <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.phone}</div>}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -254,12 +320,36 @@ export const ManageUsers: React.FC = () => {
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono text-slate-600">
-                      {u.phone || '—'}
+                    <td className="py-3.5 px-4 font-semibold text-slate-700">
+                      <span className="inline-flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-lg text-xs">
+                        <BookMarked className="w-3.5 h-3.5 text-slate-500" />
+                        {u._count?.lendings ?? 0}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {u.active ? (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                          Inactive
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(u)}
+                          title="Edit Member Details"
+                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => {
                             setSelectedUser(u);
@@ -490,6 +580,204 @@ export const ManageUsers: React.FC = () => {
               className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl shadow-xs transition"
             >
               Register Member
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedUser(null);
+        }}
+        title={`Edit Member: ${selectedUser?.name || 'User'}`}
+        maxWidth="xl"
+      >
+        <form onSubmit={handleUpdateUser} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+              <input
+                type="text"
+                required
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="e.g. Ramesh Reddy"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Email Address *</label>
+              <input
+                type="email"
+                required
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                placeholder="e.g. ramesh.r@student.rgkedia.edu.in"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Role *</label>
+              <select
+                value={editFormData.role}
+                onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as Role })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold"
+              >
+                <option value="STUDENT">Student</option>
+                <option value="TEACHER">Faculty Member (Teacher)</option>
+                <option value="LIBRARIAN">Librarian Administrator</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Phone Number (Optional)</label>
+              <input
+                type="text"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                placeholder="e.g. 9849012345"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+              />
+            </div>
+          </div>
+
+          {editFormData.role === 'STUDENT' && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Roll Number (Unique)</label>
+                  <input
+                    type="text"
+                    value={editFormData.rollNumber}
+                    onChange={(e) => setEditFormData({ ...editFormData, rollNumber: e.target.value })}
+                    placeholder="e.g. 1052-24-401-050"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Degree Program</label>
+                  <select
+                    value={editFormData.program}
+                    onChange={(e) => {
+                      const prog = e.target.value as Program;
+                      setEditFormData({
+                        ...editFormData,
+                        program: prog,
+                        branch: prog === 'BCOM' ? 'General' : prog === 'BBA' ? 'General Business Administration' : 'Computer Science & Data',
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold"
+                  >
+                    <option value="BCOM">Bachelor of Commerce (B.Com)</option>
+                    <option value="BBA">Bachelor of Business Administration (BBA)</option>
+                    <option value="BSC">Bachelor of Science (B.Sc)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Branch / Specialization</label>
+                  {editFormData.program === 'BCOM' && (
+                    <select
+                      value={editFormData.branch}
+                      onChange={(e) => setEditFormData({ ...editFormData, branch: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    >
+                      <option value="General">B.Com General</option>
+                      <option value="Computer Applications">B.Com Computer Applications</option>
+                      <option value="Business Analytics">B.Com Business Analytics</option>
+                      <option value="Honors">B.Com Honors</option>
+                    </select>
+                  )}
+                  {editFormData.program === 'BBA' && (
+                    <select
+                      value={editFormData.branch}
+                      onChange={(e) => setEditFormData({ ...editFormData, branch: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    >
+                      <option value="General Business Administration">General Business Administration</option>
+                    </select>
+                  )}
+                  {editFormData.program === 'BSC' && (
+                    <select
+                      value={editFormData.branch}
+                      onChange={(e) => setEditFormData({ ...editFormData, branch: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    >
+                      <option value="Mathematics">B.Sc Mathematics</option>
+                      <option value="Statistics">B.Sc Statistics</option>
+                      <option value="Computer Science & Data">B.Sc Computer Science & Data</option>
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Second Language Choice</label>
+                  <select
+                    value={editFormData.secondLanguage}
+                    onChange={(e) => setEditFormData({ ...editFormData, secondLanguage: e.target.value as SecondLanguage })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold"
+                  >
+                    <option value="TELUGU">Telugu (తెలుగు)</option>
+                    <option value="SANSKRIT">Sanskrit (संस्कृतम्)</option>
+                    <option value="HINDI">Hindi (हिन्दी)</option>
+                    <option value="ARABIC">Arabic (العربية)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Current Year</label>
+                  <select
+                    value={editFormData.year}
+                    onChange={(e) => setEditFormData({ ...editFormData, year: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Current Semester</label>
+                  <select
+                    value={editFormData.semester}
+                    onChange={(e) => setEditFormData({ ...editFormData, semester: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((s) => (
+                      <option key={s} value={s}>
+                        Semester {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setSelectedUser(null);
+              }}
+              className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xs transition"
+            >
+              Save Changes
             </button>
           </div>
         </form>

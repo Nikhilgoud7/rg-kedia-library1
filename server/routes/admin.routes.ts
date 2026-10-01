@@ -65,8 +65,8 @@ router.get('/dashboard', authenticate, authorize('LIBRARIAN'), async (_req: Auth
         overdueCount,
         todayIssued,
       },
-      booksByProgram: booksByProgram.map(b => ({ program: b.program, count: b._count.id })),
-      booksByCategory: booksByCategory.map(b => ({ category: b.category, count: b._count.id })),
+      booksByProgram: booksByProgram.map((b: any) => ({ program: b.program, count: b._count.id })),
+      booksByCategory: booksByCategory.map((b: any) => ({ category: b.category, count: b._count.id })),
       recentLendings,
     });
   } catch (error) {

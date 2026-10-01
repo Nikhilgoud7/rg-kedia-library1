@@ -23,6 +23,9 @@ import StudentDashboard from './pages/student/Dashboard';
 import BrowseBooks from './pages/student/BrowseBooks';
 import MyBorrowings from './pages/student/MyBorrowings';
 import ExamGuide from './pages/student/ExamGuide';
+import Notifications from './pages/student/Notifications';
+import Profile from './pages/student/Profile';
+import Settings from './pages/student/Settings';
 
 // Teacher Pages
 import TeacherDashboard from './pages/teacher/Dashboard';
@@ -192,6 +195,30 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['STUDENT']}>
                 <ExamGuide />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/notifications"
+            element={
+              <ProtectedRoute allowedRoles={['STUDENT']}>
+                <Notifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/profile"
+            element={
+              <ProtectedRoute allowedRoles={['STUDENT']}>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/settings"
+            element={
+              <ProtectedRoute allowedRoles={['STUDENT']}>
+                <Settings />
               </ProtectedRoute>
             }
           />

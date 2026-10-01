@@ -42,7 +42,7 @@ router.post('/login', async (req, res: Response): Promise<void> => {
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'default-secret';
     const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const token = jwt.sign({ id: user.id }, secret, { expiresIn });
+    const token = jwt.sign({ id: user.id }, secret, { expiresIn: expiresIn as any });
 
     // Return user info (without password)
     const { password: _, ...userWithoutPassword } = user;

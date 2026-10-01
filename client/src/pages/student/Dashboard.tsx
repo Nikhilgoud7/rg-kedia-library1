@@ -15,6 +15,7 @@ import {
   Sparkles,
   FileText,
   Search,
+  Bell,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -24,6 +25,7 @@ export const StudentDashboard: React.FC = () => {
   const [borrowedBooks, setBorrowedBooks] = useState<Lending[]>([]);
   const [recommendedBooks, setRecommendedBooks] = useState<Book[]>([]);
   const [recentExamPapers, setRecentExamPapers] = useState<ExamPaper[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Borrow Modal
@@ -35,7 +37,7 @@ export const StudentDashboard: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [lendingsRes, booksRes, papersRes] = await Promise.all([
+        const [lendingsRes, booksRes, papersRes, notifRes] = await Promise.all([
           api.get('/lending/my-books'),
           api.get('/books', {
             params: {
@@ -50,6 +52,7 @@ export const StudentDashboard: React.FC = () => {
               semester: user?.semester || undefined,
             },
           }),
+          api.get('/lending/notifications'),
         ]);
 
         setBorrowedBooks(
@@ -57,6 +60,7 @@ export const StudentDashboard: React.FC = () => {
         );
         setRecommendedBooks(booksRes.data.books || []);
         setRecentExamPapers(papersRes.data.papers?.slice(0, 3) || []);
+        setNotifications(notifRes.data.notifications || []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -87,6 +91,8 @@ export const StudentDashboard: React.FC = () => {
   const overdueCount = borrowedBooks.filter(
     (l) => new Date(l.dueDate) < new Date()
   ).length;
+
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   return (
     <div className="space-y-6">
@@ -129,7 +135,7 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       {/* Quick Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <StatCard
           title="Currently Borrowed"
           value={borrowedBooks.length}
@@ -151,6 +157,15 @@ export const StudentDashboard: React.FC = () => {
           icon={GraduationCap}
           color="amber"
         />
+        <Link to="/student/notifications" className="block">
+          <StatCard
+            title="Notifications"
+            value={unreadNotifs}
+            subtitle={unreadNotifs === 1 ? "1 unread alert" : `${unreadNotifs} unread alerts`}
+            icon={Bell}
+            color={unreadNotifs > 0 ? "red" : "indigo"}
+          />
+        </Link>
       </div>
 
       {/* Main Grid: My Borrowed Books + Exam Papers */}

@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Check, Clock, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 import api from '../../lib/api';
 import { Notification } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 export const NotificationBell: React.FC = () => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -117,6 +120,16 @@ export const NotificationBell: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+
+            <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
+              <Link
+                to={user?.role === 'STUDENT' ? '/student/notifications' : '#'}
+                onClick={() => setIsOpen(false)}
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 block w-full py-1"
+              >
+                View all notifications
+              </Link>
             </div>
           </div>
         </>

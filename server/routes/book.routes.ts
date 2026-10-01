@@ -81,8 +81,8 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response): Pro
       totalCopies,
       issuedCopies,
       availableCopies,
-      segments: segments.map(s => ({ name: s.segment, count: s._count.id })),
-      categories: categories.map(c => ({ name: c.category, count: c._count.id })),
+      segments: segments.map((s: any) => ({ name: s.segment, count: s._count.id })),
+      categories: categories.map((c: any) => ({ name: c.category, count: c._count.id })),
     });
   } catch (error) {
     console.error('Book stats error:', error);
@@ -98,7 +98,7 @@ router.get('/segments', authenticate, async (_req: AuthRequest, res: Response): 
       _count: { id: true },
       orderBy: { segment: 'asc' },
     });
-    res.json({ segments: segments.map(s => ({ name: s.segment, bookCount: s._count.id })) });
+    res.json({ segments: segments.map((s: any) => ({ name: s.segment, bookCount: s._count.id })) });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }

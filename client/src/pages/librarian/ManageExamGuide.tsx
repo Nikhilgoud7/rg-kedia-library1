@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { ExamPaper, Program } from '../../types';
 import Modal from '../../components/common/Modal';
+import { useAuth } from '../../context/AuthContext';
 import { Plus, Search, FileText, Download, Trash2, GraduationCap, CheckCircle2, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const ManageExamGuide: React.FC = () => {
+  const { user } = useAuth();
   const [papers, setPapers] = useState<ExamPaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<string>('');
@@ -250,13 +252,15 @@ export const ManageExamGuide: React.FC = () => {
                   <span>Download File</span>
                 </a>
 
-                <button
-                  onClick={() => handleDeletePaper(paper.id, paper.title)}
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                  title="Delete paper"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {(user?.role === 'LIBRARIAN' || paper.uploadedById === user?.id) && (
+                  <button
+                    onClick={() => handleDeletePaper(paper.id, paper.title)}
+                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    title="Delete paper"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))

@@ -371,9 +371,36 @@ router.get('/notifications', authenticate, async (req: AuthRequest, res: Respons
   }
 });
 
+// PUT /api/lending/notifications/read-all - Mark all notifications as read
+router.put('/notifications/read-all', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    await prisma.notification.updateMany({
+      where: { userId: req.user!.id, read: false },
+      data: { read: true },
+    });
+    res.json({ message: 'All notifications marked as read.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
 // PUT /api/lending/notifications/:id/read - Mark notification as read
 router.put('/notifications/:id/read', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!notification) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+
+    if (notification.userId !== req.user!.id) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
     await prisma.notification.update({
       where: { id: req.params.id },
       data: { read: true },

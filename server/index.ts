@@ -8,6 +8,7 @@ import bookRoutes from './routes/book.routes.js';
 import lendingRoutes from './routes/lending.routes.js';
 import examRoutes from './routes/exam.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ app.use('/api/books', bookRoutes);
 app.use('/api/lending', lendingRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/user', userRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
