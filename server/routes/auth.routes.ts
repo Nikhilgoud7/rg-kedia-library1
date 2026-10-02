@@ -99,7 +99,7 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
     // Generate JWT
     const secret = process.env.JWT_SECRET || 'default-secret';
     const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const token = jwt.sign({ id: user.id }, secret, { expiresIn: expiresIn as any });
+    const token = jwt.sign({ id: user.id, v: user.tokenVersion }, secret, { expiresIn: expiresIn as any });
 
     // Set HttpOnly cookie
     res.cookie('rg_kedia_token', token, {
@@ -110,7 +110,7 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
     });
 
     // Return user info (without password, security counters, or token)
-    const { password: _, failedLoginAttempts: __, lockedUntil: ___, ...userWithoutPassword } = user;
+    const { password: _, failedLoginAttempts: __, lockedUntil: ___, tokenVersion: ____, ...userWithoutPassword } = user;
     res.json({
       user: userWithoutPassword,
     });
@@ -120,14 +120,45 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
   }
 });
 
-// POST /api/auth/logout - Clear auth cookie
-router.post('/logout', async (_req, res: Response): Promise<void> => {
-  res.clearCookie('rg_kedia_token', {
+// POST /api/auth/logout - Clear auth cookie and revoke session server-side
+router.post('/logout', async (req: AuthRequest, res: Response): Promise<void> => {
+  const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
-  res.json({ message: 'Logged out successfully.' });
+    sameSite: 'strict' as const,
+  };
+
+  try {
+    // Attempt to read and verify the token to increment tokenVersion
+    let token = req.cookies?.rg_kedia_token;
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (token) {
+      try {
+        const secret = process.env.JWT_SECRET || 'default-secret';
+        const decoded = jwt.verify(token, secret) as { id: string; v?: number };
+
+        if (decoded.id) {
+          // Increment tokenVersion to invalidate all existing JWTs for this user
+          await prisma.user.update({
+            where: { id: decoded.id },
+            data: { tokenVersion: { increment: 1 } },
+          });
+        }
+      } catch {
+        // Token is invalid/expired — still clear the cookie below
+      }
+    }
+
+    res.clearCookie('rg_kedia_token', cookieOptions);
+    res.json({ message: 'Logged out successfully.' });
+  } catch (error) {
+    // Always clear the cookie even on unexpected errors
+    res.clearCookie('rg_kedia_token', cookieOptions);
+    res.json({ message: 'Logged out successfully.' });
+  }
 });
 
 // POST /api/auth/register (Librarian creates accounts)
@@ -182,7 +213,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response): 
       },
     });
 
-    const { password: _, failedLoginAttempts: __, lockedUntil: ___, ...userWithoutPassword } = user;
+    const { password: _, failedLoginAttempts: __, lockedUntil: ___, tokenVersion: ____, ...userWithoutPassword } = user;
     res.status(201).json({ user: userWithoutPassword });
   } catch (error) {
     console.error('Register error:', error);
@@ -236,10 +267,17 @@ router.put('/change-password', authenticate, async (req: AuthRequest, res: Respo
 
     await prisma.user.update({
       where: { id: req.user!.id },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, tokenVersion: { increment: 1 } },
     });
 
-    res.json({ message: 'Password changed successfully.' });
+    // Clear the auth cookie — user must log in again with the new password
+    res.clearCookie('rg_kedia_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+
+    res.json({ message: 'Password changed successfully. Please log in again.' });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Server error changing password.' });

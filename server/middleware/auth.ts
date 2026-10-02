@@ -31,15 +31,27 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
 
     const secret = process.env.JWT_SECRET || 'default-secret';
-    const decoded = jwt.verify(token, secret) as { id: string };
+    const decoded = jwt.verify(token, secret) as { id: string; v?: number };
+
+    // Require the v (tokenVersion) claim — reject legacy tokens without it
+    if (decoded.v === undefined || decoded.v === null) {
+      res.status(401).json({ error: 'Invalid or expired token.' });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true },
+      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true, tokenVersion: true },
     });
 
     if (!user || !user.active) {
       res.status(401).json({ error: 'User not found or deactivated.' });
+      return;
+    }
+
+    // Verify token version matches — reject revoked sessions
+    if (decoded.v !== user.tokenVersion) {
+      res.status(401).json({ error: 'Session has been revoked.' });
       return;
     }
 
