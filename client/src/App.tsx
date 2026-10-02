@@ -17,6 +17,8 @@ import ManageUsers from './pages/librarian/ManageUsers';
 import LendingRequests from './pages/librarian/LendingRequests';
 import IssuedBooks from './pages/librarian/IssuedBooks';
 import ManageExamGuide from './pages/librarian/ManageExamGuide';
+import LibrarianProfile from './pages/librarian/Profile';
+import LibrarianSettings from './pages/librarian/Settings';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -24,13 +26,15 @@ import BrowseBooks from './pages/student/BrowseBooks';
 import MyBorrowings from './pages/student/MyBorrowings';
 import ExamGuide from './pages/student/ExamGuide';
 import Notifications from './pages/student/Notifications';
-import Profile from './pages/student/Profile';
-import Settings from './pages/student/Settings';
+import StudentProfile from './pages/student/Profile';
+import StudentSettings from './pages/student/Settings';
 
 // Teacher Pages
 import TeacherDashboard from './pages/teacher/Dashboard';
 import TeacherBrowseBooks from './pages/teacher/BrowseBooks';
 import RequestReturn from './pages/teacher/RequestReturn';
+import TeacherProfile from './pages/teacher/Profile';
+import TeacherSettings from './pages/teacher/Settings';
 
 // Layout wrapper for authenticated pages
 const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -164,6 +168,22 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/librarian/profile"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <LibrarianProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/librarian/settings"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <LibrarianSettings />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Student Routes */}
           <Route
@@ -210,7 +230,7 @@ export const App: React.FC = () => {
             path="/student/profile"
             element={
               <ProtectedRoute allowedRoles={['STUDENT']}>
-                <Profile />
+                <StudentProfile />
               </ProtectedRoute>
             }
           />
@@ -218,7 +238,7 @@ export const App: React.FC = () => {
             path="/student/settings"
             element={
               <ProtectedRoute allowedRoles={['STUDENT']}>
-                <Settings />
+                <StudentSettings />
               </ProtectedRoute>
             }
           />
@@ -261,6 +281,22 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['TEACHER']}>
                 <ManageExamGuide />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/profile"
+            element={
+              <ProtectedRoute allowedRoles={['TEACHER']}>
+                <TeacherProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/settings"
+            element={
+              <ProtectedRoute allowedRoles={['TEACHER']}>
+                <TeacherSettings />
               </ProtectedRoute>
             }
           />

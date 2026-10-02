@@ -171,6 +171,13 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
   try {
     const { name, email, role, rollNumber, program, branch, year, semester, secondLanguage, phone, active } = req.body;
 
+    const existingUser = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { active: true },
+    });
+
+    const shouldDeactivate = active === false && existingUser?.active === true;
+
     const user = await prisma.user.update({
       where: { id: req.params.id },
       data: {
@@ -185,6 +192,7 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
         secondLanguage: secondLanguage ?? undefined,
         phone: phone ?? undefined,
         active: active !== undefined ? active : undefined,
+        ...(shouldDeactivate && { tokenVersion: { increment: 1 } }),
       },
       select: {
         id: true, name: true, email: true, role: true,
@@ -215,7 +223,10 @@ router.put('/users/:id/reset-password', authenticate, authorize('LIBRARIAN'), as
 
     await prisma.user.update({
       where: { id: req.params.id },
-      data: { password: hashedPassword },
+      data: {
+        password: hashedPassword,
+        tokenVersion: { increment: 1 },
+      },
     });
 
     res.json({ message: 'Password reset successfully.' });
