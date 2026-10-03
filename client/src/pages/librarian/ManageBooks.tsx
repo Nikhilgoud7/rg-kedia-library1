@@ -15,6 +15,8 @@ export const ManageBooks: React.FC = () => {
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCopiesModalOpen, setIsCopiesModalOpen] = useState(false);
+  const [selectedBookForCopies, setSelectedBookForCopies] = useState<any | null>(null);
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
 
   // Form State
@@ -256,6 +258,22 @@ export const ManageBooks: React.FC = () => {
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={async () => {
+                            try {
+                              const res = await api.get(`/books/${b.id}`);
+                              setSelectedBookForCopies(res.data.book);
+                              setIsCopiesModalOpen(true);
+                            } catch (err) {
+                              toast.error('Failed to load book copies');
+                            }
+                          }}
+                          title="Manage Physical Copies"
+                          className="px-2.5 py-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition flex items-center gap-1"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Copies ({b.totalCopies})</span>
+                        </button>
+                        <button
                           onClick={() => handleDeleteBook(b.id, b.title)}
                           title="Delete book"
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
@@ -443,7 +461,150 @@ export const ManageBooks: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Physical Copies Management Modal */}
+      {selectedBookForCopies && (
+        <Modal
+          isOpen={isCopiesModalOpen}
+          onClose={() => {
+            setIsCopiesModalOpen(false);
+            setSelectedBookForCopies(null);
+          }}
+          title={`Physical Copies — ${selectedBookForCopies.title}`}
+          maxWidth="3xl"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-slate-700 font-semibold">
+              <div>
+                Author: <span className="font-bold">{selectedBookForCopies.author}</span>
+              </div>
+              <div>
+                Available Copies: <span className="font-extrabold text-emerald-600">{selectedBookForCopies.availableCopies}</span> / {selectedBookForCopies.totalCopies}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
+                  <tr>
+                    <th className="p-2.5">Copy #</th>
+                    <th className="p-2.5">Barcode</th>
+                    <th className="p-2.5">Condition</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedBookForCopies.copies?.map((copy: any) => (
+                    <CopyRow
+                      key={copy.id}
+                      copy={copy}
+                      bookId={selectedBookForCopies.id}
+                      onUpdated={async () => {
+                        fetchBooks();
+                        const refreshed = await api.get(`/books/${selectedBookForCopies.id}`);
+                        setSelectedBookForCopies(refreshed.data.book);
+                      }}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCopiesModalOpen(false);
+                  setSelectedBookForCopies(null);
+                }}
+                className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+};
+
+/** Row component for editing an individual physical copy */
+const CopyRow: React.FC<{
+  copy: any;
+  bookId: string;
+  onUpdated: () => void;
+}> = ({ copy, onUpdated }) => {
+  const [condition, setCondition] = useState(copy.condition || 'Good');
+  const [status, setStatus] = useState(copy.status || 'AVAILABLE');
+  const [barcode, setBarcode] = useState(copy.barcode || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await api.put(`/books/copies/${copy.id}`, {
+        condition,
+        status,
+        barcode,
+      });
+      toast.success(`Copy #${copy.copyNumber} updated successfully!`);
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update copy');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <tr className="hover:bg-slate-50">
+      <td className="p-2.5 font-bold text-slate-900">Copy #{copy.copyNumber}</td>
+      <td className="p-2.5">
+        <input
+          type="text"
+          value={barcode}
+          onChange={(e) => setBarcode(e.target.value)}
+          placeholder="Barcode (e.g. BC-1001)"
+          className="w-32 px-2 py-1 text-xs border border-slate-200 rounded-lg font-mono focus:ring-1 focus:ring-amber-500"
+        />
+      </td>
+      <td className="p-2.5">
+        <select
+          value={condition}
+          onChange={(e) => setCondition(e.target.value)}
+          className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white font-medium"
+        >
+          <option value="Good">Good</option>
+          <option value="Fair">Fair</option>
+          <option value="Poor">Poor</option>
+          <option value="Damaged">Damaged</option>
+        </select>
+      </td>
+      <td className="p-2.5">
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white font-bold text-slate-800"
+        >
+          <option value="AVAILABLE">AVAILABLE</option>
+          <option value="ISSUED">ISSUED</option>
+          <option value="RESERVED">RESERVED</option>
+          <option value="LOST">LOST</option>
+          <option value="DAMAGED">DAMAGED</option>
+        </select>
+      </td>
+      <td className="p-2.5 text-right">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg transition disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </td>
+    </tr>
   );
 };
 

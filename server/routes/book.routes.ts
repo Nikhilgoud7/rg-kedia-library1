@@ -241,4 +241,77 @@ router.delete('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
   }
 });
 
+// PUT /api/books/copies/:copyId - Update physical book copy condition, status, and barcode (Librarian only)
+router.put('/copies/:copyId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { condition, status, barcode } = req.body;
+
+    const copy = await prisma.bookCopy.findUnique({
+      where: { id: req.params.copyId },
+      include: { book: true },
+    });
+
+    if (!copy) {
+      res.status(404).json({ error: 'Book copy not found.' });
+      return;
+    }
+
+    if (condition && !['Good', 'Fair', 'Poor', 'Damaged'].includes(condition)) {
+      res.status(400).json({ error: 'Invalid condition. Allowed: Good, Fair, Poor, Damaged.' });
+      return;
+    }
+
+    if (status && !['AVAILABLE', 'ISSUED', 'RESERVED', 'LOST', 'DAMAGED'].includes(status)) {
+      res.status(400).json({ error: 'Invalid status. Allowed: AVAILABLE, ISSUED, RESERVED, LOST, DAMAGED.' });
+      return;
+    }
+
+    // Check barcode uniqueness if updating barcode
+    if (barcode !== undefined && barcode !== null && barcode !== '') {
+      const existingBarcode = await prisma.bookCopy.findFirst({
+        where: { barcode, id: { not: req.params.copyId } },
+      });
+      if (existingBarcode) {
+        res.status(409).json({ error: 'Barcode is already assigned to another book copy.' });
+        return;
+      }
+    }
+
+    // Inventory count synchronization
+    const wasAvailable = copy.status === 'AVAILABLE';
+    const nowAvailable = (status || copy.status) === 'AVAILABLE';
+
+    let availableDelta = 0;
+    if (wasAvailable && !nowAvailable) availableDelta = -1;
+    if (!wasAvailable && nowAvailable) availableDelta = 1;
+
+    const updatedCopy = await prisma.$transaction(async (tx) => {
+      const updated = await tx.bookCopy.update({
+        where: { id: copy.id },
+        data: {
+          ...(condition && { condition }),
+          ...(status && { status }),
+          barcode: barcode === '' ? null : barcode ?? undefined,
+        },
+      });
+
+      if (availableDelta !== 0) {
+        await tx.book.update({
+          where: { id: copy.bookId },
+          data: {
+            availableCopies: { increment: availableDelta },
+          },
+        });
+      }
+
+      return updated;
+    });
+
+    res.json({ copy: updatedCopy, message: 'Book copy updated successfully.' });
+  } catch (error) {
+    console.error('Update book copy error:', error);
+    res.status(500).json({ error: 'Server error updating book copy.' });
+  }
+});
+
 export default router;

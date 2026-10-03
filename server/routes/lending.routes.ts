@@ -268,13 +268,38 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
       where: { userId: req.user!.id },
       include: {
         bookCopy: {
-          include: { book: { select: { id: true, title: true, author: true, segment: true, category: true } } },
+          include: { book: { select: { id: true, title: true, author: true, segment: true, category: true, shelfLocation: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ lendings });
+    const now = new Date();
+
+    const formattedLendings = lendings.map((lending) => {
+      const isReturned = lending.status === 'RETURNED';
+      const isOverdue = !isReturned && now > lending.dueDate;
+
+      let daysOverdue = 0;
+      let calculatedFine = lending.fine; // Use recorded fine if returned
+
+      if (!isReturned && isOverdue) {
+        daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        calculatedFine = daysOverdue * 2; // ₹2 per day policy
+      } else if (isReturned && lending.fine > 0) {
+        daysOverdue = Math.ceil(lending.fine / 2);
+      }
+
+      return {
+        ...lending,
+        isOverdue,
+        daysOverdue,
+        fine: calculatedFine,
+        finePolicy: '₹2 per overdue day',
+      };
+    });
+
+    res.json({ lendings: formattedLendings });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }
