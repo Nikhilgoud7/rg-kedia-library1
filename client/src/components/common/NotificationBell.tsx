@@ -124,7 +124,13 @@ export const NotificationBell: React.FC = () => {
 
             <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
               <Link
-                to={user?.role === 'STUDENT' ? '/student/notifications' : '#'}
+                to={
+                  user?.role === 'LIBRARIAN'
+                    ? '/librarian/notifications'
+                    : user?.role === 'TEACHER'
+                    ? '/teacher/notifications'
+                    : '/student/notifications'
+                }
                 onClick={() => setIsOpen(false)}
                 className="text-xs font-bold text-amber-600 hover:text-amber-700 block w-full py-1"
               >

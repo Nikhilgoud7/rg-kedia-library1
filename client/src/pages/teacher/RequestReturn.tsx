@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { Lending } from '../../types';
 import Modal from '../../components/common/Modal';
-import { RotateCcw, Search, User, BookOpen, Clock, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { RotateCcw, Search, BookOpen, Send, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const RequestReturn: React.FC = () => {
   const [lendings, setLendings] = useState<Lending[]>([]);
   const [search, setSearch] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState<string>('');
   const [selectedLending, setSelectedLending] = useState<Lending | null>(null);
   const [returnMessage, setReturnMessage] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -16,31 +17,16 @@ export const RequestReturn: React.FC = () => {
   const fetchLendings = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/books');
-      // Fetch details of books that have active lendings
-      const activeList: Lending[] = [];
-      for (const book of res.data.books || []) {
-        if (book.totalCopies > book.availableCopies) {
-          const detail = await api.get(`/books/${book.id}`);
-          for (const copy of detail.data.book?.copies || []) {
-            if (copy.lendings && copy.lendings.length > 0) {
-              for (const l of copy.lendings) {
-                activeList.push({
-                  ...l,
-                  bookCopy: {
-                    ...copy,
-                    book: detail.data.book,
-                  },
-                });
-              }
-            }
-          }
-        }
-      }
-      setLendings(activeList);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load student checkouts');
+      const res = await api.get('/lending/all', {
+        params: {
+          program: selectedProgram || undefined,
+          search: search || undefined,
+        },
+      });
+      setLendings(res.data.lendings || []);
+    } catch (err: any) {
+      console.error('Failed to fetch student checkouts:', err);
+      toast.error(err.response?.data?.error || 'Failed to load student checkouts');
     } finally {
       setLoading(false);
     }
@@ -48,7 +34,12 @@ export const RequestReturn: React.FC = () => {
 
   useEffect(() => {
     fetchLendings();
-  }, []);
+  }, [selectedProgram]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchLendings();
+  };
 
   const handleSendReturn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,9 +81,9 @@ export const RequestReturn: React.FC = () => {
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="relative">
+      {/* Search and Program Filters */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
@@ -101,6 +92,19 @@ export const RequestReturn: React.FC = () => {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500"
           />
+        </form>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <select
+            value={selectedProgram}
+            onChange={(e) => setSelectedProgram(e.target.value)}
+            className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 font-medium"
+          >
+            <option value="">All Programs</option>
+            <option value="BCOM">B.Com</option>
+            <option value="BBA">BBA</option>
+            <option value="BSC">B.Sc</option>
+          </select>
         </div>
       </div>
 

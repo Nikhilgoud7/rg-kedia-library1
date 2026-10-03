@@ -248,7 +248,26 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         where: { id: lending.bookCopy.bookId },
         data: { availableCopies: { increment: 1 } },
       }),
+      prisma.notification.create({
+        data: {
+          userId: lending.userId,
+          title: 'Book Returned',
+          message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${fine > 0 ? ` Overdue fine: ₹${fine}.` : ''}`,
+          type: 'INFO',
+        },
+      }),
     ]);
+
+    // Fulfill any pending return requests for this book & student
+    await prisma.bookRequest.updateMany({
+      where: {
+        bookId: lending.bookCopy.bookId,
+        userId: lending.userId,
+        type: 'RETURN_REQUEST',
+        status: 'PENDING',
+      },
+      data: { status: 'APPROVED' },
+    });
 
     res.json({
       message: 'Book returned successfully.',
@@ -320,15 +339,35 @@ router.get('/my-requests', authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
-// GET /api/lending/all - All active lendings (Librarian only)
-router.get('/all', authenticate, authorize('LIBRARIAN'), async (_req: AuthRequest, res: Response): Promise<void> => {
+// GET /api/lending/all - All active lendings (Teacher and Librarian)
+router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const { program, branch, search } = req.query;
+
+    const where: any = {
+      status: { in: ['ISSUED', 'OVERDUE'] },
+    };
+
+    if (program) {
+      where.user = { ...(where.user || {}), program: program as string };
+    }
+    if (branch) {
+      where.user = { ...(where.user || {}), branch: branch as string };
+    }
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search as string } } },
+        { user: { rollNumber: { contains: search as string } } },
+        { bookCopy: { book: { title: { contains: search as string } } } },
+      ];
+    }
+
     const lendings = await prisma.lending.findMany({
-      where: { status: { in: ['ISSUED', 'OVERDUE'] } },
+      where,
       include: {
         user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } },
         bookCopy: {
-          include: { book: { select: { id: true, title: true, author: true } } },
+          include: { book: { select: { id: true, title: true, author: true, segment: true } } },
         },
       },
       orderBy: { issuedDate: 'desc' },

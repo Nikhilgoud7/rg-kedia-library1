@@ -31,6 +31,7 @@ export const Sidebar: React.FC = () => {
           { to: '/librarian/issued', label: 'Issued Books & Returns', icon: CheckSquare },
           { to: '/librarian/exam-guide', label: 'Exam Guide & Papers', icon: FileText },
           { to: '/librarian/users', label: 'Student & Faculty Users', icon: Users },
+          { to: '/librarian/notifications', label: 'Notifications', icon: Bell },
           { to: '/librarian/profile', label: 'My Profile', icon: UserCircle },
           { to: '/librarian/settings', label: 'Settings', icon: Settings },
         ];
@@ -41,6 +42,7 @@ export const Sidebar: React.FC = () => {
           { to: '/teacher/borrowings', label: 'My Borrowed Books', icon: BookmarkCheck },
           { to: '/teacher/request-return', label: 'Request Book Return', icon: RotateCcw },
           { to: '/teacher/exam-guide', label: 'Exam Guide & Uploads', icon: GraduationCap },
+          { to: '/teacher/notifications', label: 'Notifications', icon: Bell },
           { to: '/teacher/profile', label: 'My Profile', icon: UserCircle },
           { to: '/teacher/settings', label: 'Settings', icon: Settings },
         ];

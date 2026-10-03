@@ -19,6 +19,7 @@ import IssuedBooks from './pages/librarian/IssuedBooks';
 import ManageExamGuide from './pages/librarian/ManageExamGuide';
 import LibrarianProfile from './pages/librarian/Profile';
 import LibrarianSettings from './pages/librarian/Settings';
+import LibrarianNotifications from './pages/librarian/Notifications';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -35,6 +36,7 @@ import TeacherBrowseBooks from './pages/teacher/BrowseBooks';
 import RequestReturn from './pages/teacher/RequestReturn';
 import TeacherProfile from './pages/teacher/Profile';
 import TeacherSettings from './pages/teacher/Settings';
+import TeacherNotifications from './pages/teacher/Notifications';
 
 // Layout wrapper for authenticated pages
 const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -177,6 +179,14 @@ export const App: React.FC = () => {
             }
           />
           <Route
+            path="/librarian/notifications"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <LibrarianNotifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/librarian/settings"
             element={
               <ProtectedRoute allowedRoles={['LIBRARIAN']}>
@@ -289,6 +299,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['TEACHER']}>
                 <TeacherProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/notifications"
+            element={
+              <ProtectedRoute allowedRoles={['TEACHER']}>
+                <TeacherNotifications />
               </ProtectedRoute>
             }
           />

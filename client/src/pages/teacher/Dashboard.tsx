@@ -19,11 +19,12 @@ export const TeacherDashboard: React.FC = () => {
         setLoading(true);
         const [myBooksRes, allLendingsRes] = await Promise.all([
           api.get('/lending/my-books'),
-          api.get('/books'),
+          api.get('/lending/all'),
         ]);
         setBorrowedBooks(
           (myBooksRes.data.lendings || []).filter((l: Lending) => l.status === 'ISSUED')
         );
+        setAllIssuedLendings(allLendingsRes.data.lendings || []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -78,8 +79,8 @@ export const TeacherDashboard: React.FC = () => {
         />
         <StatCard
           title="Student Checkouts"
-          value="Track Live"
-          subtitle="View which student has which book"
+          value={allIssuedLendings.length}
+          subtitle="Active student loans across college"
           icon={UserCheck}
           color="emerald"
         />
