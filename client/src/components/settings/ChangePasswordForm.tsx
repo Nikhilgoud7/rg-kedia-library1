@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useId } from 'react';
 import api from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,10 @@ import toast from 'react-hot-toast';
 export const ChangePasswordForm: React.FC = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+
+  const currentPasswordId = useId();
+  const newPasswordId = useId();
+  const confirmPasswordId = useId();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -53,8 +57,12 @@ export const ChangePasswordForm: React.FC = () => {
       await logout();
       navigate('/login', { replace: true });
     } catch (err: any) {
-      const msg = err.response?.data?.error || 'Failed to change password.';
-      toast.error(msg);
+      if (err.response?.status === 429) {
+        toast.error(err.response?.data?.error || 'Too many password change attempts. Please try again after 15 minutes.');
+      } else {
+        const msg = err.response?.data?.error || 'Failed to change password.';
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -72,18 +80,21 @@ export const ChangePasswordForm: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          <label htmlFor={currentPasswordId} className="block text-xs font-bold text-slate-700 mb-1.5">
             Current Password <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id={currentPasswordId}
               type="password"
               value={currentPassword}
               onChange={(e) => {
                 setCurrentPassword(e.target.value);
                 if (errors.currentPassword) setErrors((p) => ({ ...p, currentPassword: undefined }));
               }}
+              aria-invalid={!!errors.currentPassword}
+              aria-describedby={errors.currentPassword ? `${currentPasswordId}-error` : undefined}
               className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition ${
                 errors.currentPassword
                   ? 'border-red-300 focus:ring-red-200'
@@ -93,23 +104,26 @@ export const ChangePasswordForm: React.FC = () => {
             />
           </div>
           {errors.currentPassword && (
-            <p className="text-xs text-red-500 mt-1 font-medium">{errors.currentPassword}</p>
+            <p id={`${currentPasswordId}-error`} role="alert" className="text-xs text-red-500 mt-1 font-medium">{errors.currentPassword}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          <label htmlFor={newPasswordId} className="block text-xs font-bold text-slate-700 mb-1.5">
             New Password <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id={newPasswordId}
               type="password"
               value={newPassword}
               onChange={(e) => {
                 setNewPassword(e.target.value);
                 if (errors.newPassword) setErrors((p) => ({ ...p, newPassword: undefined }));
               }}
+              aria-invalid={!!errors.newPassword}
+              aria-describedby={errors.newPassword ? `${newPasswordId}-error` : undefined}
               className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition ${
                 errors.newPassword
                   ? 'border-red-300 focus:ring-red-200'
@@ -119,23 +133,26 @@ export const ChangePasswordForm: React.FC = () => {
             />
           </div>
           {errors.newPassword && (
-            <p className="text-xs text-red-500 mt-1 font-medium">{errors.newPassword}</p>
+            <p id={`${newPasswordId}-error`} role="alert" className="text-xs text-red-500 mt-1 font-medium">{errors.newPassword}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          <label htmlFor={confirmPasswordId} className="block text-xs font-bold text-slate-700 mb-1.5">
             Confirm New Password <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id={confirmPasswordId}
               type="password"
               value={confirmPassword}
               onChange={(e) => {
                 setConfirmPassword(e.target.value);
                 if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: undefined }));
               }}
+              aria-invalid={!!errors.confirmPassword}
+              aria-describedby={errors.confirmPassword ? `${confirmPasswordId}-error` : undefined}
               className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition ${
                 errors.confirmPassword
                   ? 'border-red-300 focus:ring-red-200'
@@ -145,7 +162,7 @@ export const ChangePasswordForm: React.FC = () => {
             />
           </div>
           {errors.confirmPassword && (
-            <p className="text-xs text-red-500 mt-1 font-medium">{errors.confirmPassword}</p>
+            <p id={`${confirmPasswordId}-error`} role="alert" className="text-xs text-red-500 mt-1 font-medium">{errors.confirmPassword}</p>
           )}
         </div>
 

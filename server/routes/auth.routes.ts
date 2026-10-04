@@ -240,13 +240,37 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
   }
 });
 
+// Change password rate limiting configuration: 5 attempts per user per 15 minutes
+const CHANGE_PASSWORD_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const CHANGE_PASSWORD_RATE_LIMIT_MAX = 5;
+
+const changePasswordLimiter = rateLimit({
+  windowMs: CHANGE_PASSWORD_RATE_LIMIT_WINDOW_MS,
+  max: CHANGE_PASSWORD_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'anonymous',
+  statusCode: 429,
+  message: { error: 'Too many password change attempts. Please try again after 15 minutes.' },
+});
+
 // PUT /api/auth/change-password
-router.put('/change-password', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/change-password', authenticate, changePasswordLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      res.status(400).json({ error: 'Current and new passwords are required.' });
+    if (!currentPassword || !newPassword || typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      res.status(400).json({ error: 'Current and new passwords must be non-empty strings.' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    if (Buffer.byteLength(newPassword, 'utf8') > 72) {
+      res.status(400).json({ error: 'New password cannot exceed 72 bytes.' });
       return;
     }
 
@@ -259,6 +283,11 @@ router.put('/change-password', authenticate, async (req: AuthRequest, res: Respo
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       res.status(401).json({ error: 'Current password is incorrect.' });
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      res.status(400).json({ error: 'New password must be different from current password.' });
       return;
     }
 

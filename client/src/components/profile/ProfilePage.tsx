@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import { User } from '../../types';
@@ -28,6 +28,9 @@ export const ProfilePage: React.FC = () => {
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const nameInputId = useId();
+  const phoneInputId = useId();
 
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -230,18 +233,21 @@ export const ProfilePage: React.FC = () => {
             {isEditing ? (
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label htmlFor={nameInputId} className="block text-xs font-bold text-slate-700 mb-1.5">
                     Full Name <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                      id={nameInputId}
                       type="text"
                       value={editName}
                       onChange={(e) => {
                         setEditName(e.target.value);
                         if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
                       }}
+                      aria-invalid={!!fieldErrors.name}
+                      aria-describedby={fieldErrors.name ? `${nameInputId}-error` : undefined}
                       className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition ${
                         fieldErrors.name
                           ? 'border-red-300 focus:ring-red-200'
@@ -252,23 +258,26 @@ export const ProfilePage: React.FC = () => {
                     />
                   </div>
                   {fieldErrors.name && (
-                    <p className="text-xs text-red-500 mt-1 font-medium">{fieldErrors.name}</p>
+                    <p id={`${nameInputId}-error`} role="alert" className="text-xs text-red-500 mt-1 font-medium">{fieldErrors.name}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  <label htmlFor={phoneInputId} className="block text-xs font-bold text-slate-700 mb-1.5">
                     Phone Number <span className="text-slate-400">(Optional)</span>
                   </label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                      id={phoneInputId}
                       type="tel"
                       value={editPhone}
                       onChange={(e) => {
                         setEditPhone(e.target.value);
                         if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
                       }}
+                      aria-invalid={!!fieldErrors.phone}
+                      aria-describedby={fieldErrors.phone ? `${phoneInputId}-error` : undefined}
                       className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 transition ${
                         fieldErrors.phone
                           ? 'border-red-300 focus:ring-red-200'
@@ -279,7 +288,7 @@ export const ProfilePage: React.FC = () => {
                     />
                   </div>
                   {fieldErrors.phone && (
-                    <p className="text-xs text-red-500 mt-1 font-medium">{fieldErrors.phone}</p>
+                    <p id={`${phoneInputId}-error`} role="alert" className="text-xs text-red-500 mt-1 font-medium">{fieldErrors.phone}</p>
                   )}
                 </div>
 

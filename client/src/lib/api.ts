@@ -20,7 +20,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       // Clear token on unauthorized if not on login page
-      if (window.location.pathname !== '/login') {
+      const isChangePassword = error.config?.url?.includes('/auth/change-password');
+      if (window.location.pathname !== '/login' && !isChangePassword) {
         localStorage.removeItem('rg_kedia_token');
         localStorage.removeItem('rg_kedia_user');
         window.location.href = '/login';
