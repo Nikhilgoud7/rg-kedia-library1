@@ -5,7 +5,6 @@ import {
   LOAN_PERIOD_DAYS,
   RENEWAL_DAYS,
   MAX_RENEWALS,
-  FINE_PER_DAY,
 } from '../lib/lendingPolicy.js';
 
 const router = Router();
@@ -42,7 +41,7 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
       });
 
       if (activeLendingsCount + pendingRequestsCount >= MAX_ACTIVE_BORROWS_STUDENT) {
-        res.status(400).json({ error: 'Maximum limit of 3 books reached' });
+        res.status(400).json({ error: `Maximum limit of ${MAX_ACTIVE_BORROWS_STUDENT} books (borrowed + pending) reached.` });
         return;
       }
 
@@ -87,6 +86,12 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
 
     // Race-safe creation inside transaction
     const request = await prisma.$transaction(async (tx) => {
+      // Portable row locking on user row for Postgres & SQLite concurrency protection
+      await tx.user.update({
+        where: { id: req.user!.id },
+        data: { updatedAt: new Date() },
+      });
+
       const created = await tx.bookRequest.create({
         data: {
           userId: req.user!.id,
@@ -114,7 +119,7 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
           (await tx.lending.count({ where: { userId: req.user!.id, status: 'ISSUED' } })) +
           (await tx.bookRequest.count({ where: { userId: req.user!.id, status: 'PENDING', type: 'BORROW' } }));
         if (totalActive > MAX_ACTIVE_BORROWS_STUDENT) {
-          throw { status: 400, error: 'Maximum limit of 3 books reached' };
+          throw { status: 400, error: `Maximum limit of ${MAX_ACTIVE_BORROWS_STUDENT} books reached` };
         }
       }
 
@@ -341,15 +346,14 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         throw { status: 404, error: 'Active lending not found.' };
       }
 
-      let fine = 0;
+      let daysOverdue = 0;
       if (now > lending.dueDate) {
-        const daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        fine = daysOverdue * FINE_PER_DAY;
+        daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
       }
 
       const claimedLending = await tx.lending.updateMany({
         where: { id: lending.id, status: 'ISSUED' },
-        data: { status: 'RETURNED', returnedDate: now, fine },
+        data: { status: 'RETURNED', returnedDate: now, fine: 0 },
       });
 
       if (claimedLending.count === 0) {
@@ -375,7 +379,7 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         data: {
           userId: lending.userId,
           title: 'Book Returned',
-          message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${fine > 0 ? ` Overdue fine: ₹${fine}.` : ''}`,
+          message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`,
           type: 'INFO',
         },
       });
@@ -391,14 +395,13 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         data: { status: 'APPROVED' },
       });
 
-      return { fine };
+      return { daysOverdue };
     });
 
-    const fine = result.fine;
     res.json({
       message: 'Book returned successfully.',
-      fine,
-      fineMessage: fine > 0 ? `Fine of ₹${fine} for ${Math.ceil(fine / FINE_PER_DAY)} days overdue.` : null,
+      fine: 0,
+      fineMessage: null,
     });
   } catch (error: any) {
     if (error && error.status && error.error) {
@@ -430,21 +433,17 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
       const isOverdue = !isReturned && now > lending.dueDate;
 
       let daysOverdue = 0;
-      let calculatedFine = lending.fine; // Use recorded fine if returned
-
       if (!isReturned && isOverdue) {
         daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        calculatedFine = daysOverdue * FINE_PER_DAY;
-      } else if (isReturned && lending.fine > 0) {
-        daysOverdue = Math.ceil(lending.fine / FINE_PER_DAY);
+      } else if (isReturned && lending.returnedDate && lending.returnedDate > lending.dueDate) {
+        daysOverdue = Math.ceil((lending.returnedDate.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
       }
 
       return {
         ...lending,
         isOverdue,
         daysOverdue,
-        fine: calculatedFine,
-        finePolicy: `₹${FINE_PER_DAY} per overdue day`,
+        fine: 0,
       };
     });
 
@@ -460,7 +459,6 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
         loanPeriodDays: LOAN_PERIOD_DAYS,
         renewalDays: RENEWAL_DAYS,
         maxRenewals: MAX_RENEWALS,
-        finePerDay: FINE_PER_DAY,
       },
       usage: {
         activeLoans,

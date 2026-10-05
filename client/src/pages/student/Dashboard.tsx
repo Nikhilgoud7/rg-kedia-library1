@@ -150,7 +150,6 @@ export const StudentDashboard: React.FC = () => {
     (l) => l.isOverdue || new Date(l.dueDate) < new Date()
   );
   const overdueCount = overdueBooks.length;
-  const totalFine = borrowedBooks.reduce((sum, l) => sum + (l.fine || 0), 0);
   const unreadNotifs = notifications.filter((n) => !n.read).length;
 
   return (
@@ -236,11 +235,7 @@ export const StudentDashboard: React.FC = () => {
           value={overdueCount}
           subtitle={
             overdueCount > 0
-              ? totalFine > 0
-                ? `Total Fine Due: ₹${totalFine} (₹2/day)`
-                : "Return today to avoid ₹2/day fine"
-              : totalFine > 0
-              ? `Total Fine Due: ₹${totalFine}`
+              ? `${overdueCount} book${overdueCount > 1 ? 's' : ''} past due date`
               : "All books returned on time"
           }
           icon={AlertTriangle}
@@ -293,6 +288,7 @@ export const StudentDashboard: React.FC = () => {
               <div className="space-y-3">
                 {borrowedBooks.map((lending) => {
                   const isOverdue = lending.isOverdue || new Date(lending.dueDate) < new Date();
+                  const daysOverdue = lending.daysOverdue || Math.ceil((new Date().getTime() - new Date(lending.dueDate).getTime()) / (1000 * 60 * 60 * 24));
                   return (
                     <div
                       key={lending.id}
@@ -319,7 +315,7 @@ export const StudentDashboard: React.FC = () => {
                         </span>
                         {isOverdue && (
                           <span className="block text-[10px] text-red-600 font-bold mt-0.5">
-                            Overdue! {lending.fine ? `(Fine: ₹${lending.fine})` : ''}
+                            Overdue by {daysOverdue > 0 ? daysOverdue : 1} Days
                           </span>
                         )}
                       </div>
@@ -332,7 +328,7 @@ export const StudentDashboard: React.FC = () => {
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Second Language Choice: <strong>{user?.secondLanguage || 'Telugu'}</strong></span>
-            <span className="text-[11px] font-mono text-slate-400">Library Limit: 3 books max</span>
+            <span className="text-[11px] font-mono text-slate-400">Library Limit: 10 books max</span>
           </div>
         </div>
 

@@ -187,7 +187,7 @@ export const LendingRequests: React.FC = () => {
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="e.g. Please clear overdue fines before requesting new titles."
+              placeholder="e.g. Please return overdue books before requesting new titles."
               className="w-full px-3 py-2 rounded-xl border border-slate-200"
             />
           </div>

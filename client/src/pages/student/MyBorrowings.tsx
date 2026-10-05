@@ -137,7 +137,7 @@ export const MyBorrowings: React.FC = () => {
                           <span>Overdue by {Math.abs(daysLeft)} Days</span>
                         </div>
                         <p className="text-[11px] text-red-700 mt-0.5">
-                          Fine Accruing: ₹{Math.abs(daysLeft) * 2} (₹2/day)
+                          Please return to library as soon as possible.
                         </p>
                       </div>
                     ) : (
@@ -232,7 +232,7 @@ export const MyBorrowings: React.FC = () => {
                 <th className="py-3 px-4">Book Title</th>
                 <th className="py-3 px-4">Issued On</th>
                 <th className="py-3 px-4">Returned On</th>
-                <th className="py-3 px-4">Fine Paid</th>
+                <th className="py-3 px-4">Late Days</th>
                 <th className="py-3 px-4 text-right">Status</th>
               </tr>
             </thead>
@@ -256,7 +256,7 @@ export const MyBorrowings: React.FC = () => {
                       {l.returnedDate ? new Date(l.returnedDate).toLocaleDateString() : '—'}
                     </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-700">
-                      {l.fine > 0 ? `₹${l.fine}` : '₹0'}
+                      {l.daysOverdue ? `${l.daysOverdue} days late` : 'On Time'}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold">

@@ -106,7 +106,7 @@ export const LibrarianDashboard: React.FC = () => {
         <StatCard
           title="Overdue Books"
           value={stats?.overdueCount || 0}
-          subtitle="Fine accrued: ₹2 per day"
+          subtitle="Books past scheduled return date"
           icon={AlertTriangle}
           color="red"
         />

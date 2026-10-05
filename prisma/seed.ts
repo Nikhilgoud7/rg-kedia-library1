@@ -647,7 +647,7 @@ async function main() {
     data: {
       userId: student2.id,
       title: 'Overdue Notice',
-      message: 'Your borrowed book "Python for Data Analytics" was due on ' + dueDate2.toLocaleDateString() + '. Please return it to avoid daily fines.',
+      message: 'Your borrowed book "Python for Data Analytics" was due on ' + dueDate2.toLocaleDateString() + '. Please return it to the library as soon as possible.',
       type: 'OVERDUE',
     },
   });

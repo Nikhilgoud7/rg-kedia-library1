@@ -391,7 +391,7 @@ export const ProfilePage: React.FC = () => {
                   <div>
                     <h4 className="text-xs font-bold text-amber-900">System Administrator Permissions</h4>
                     <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
-                      Includes full catalog CRUD, user management, loan issuance & returns approval, exam paper management, and fine management.
+                      Includes full catalog CRUD, user management, loan issuance & returns approval, and exam paper management.
                     </p>
                   </div>
                 </div>

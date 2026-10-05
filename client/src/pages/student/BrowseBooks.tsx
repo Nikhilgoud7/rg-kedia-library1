@@ -464,7 +464,7 @@ export const BrowseBooks: React.FC = () => {
           </div>
 
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900">
-            <strong>Standard Lending Policy:</strong> Books are issued for up to 14 days. Please return on or before the due date to avoid ₹2/day overdue fees.
+            <strong>Standard Lending Policy:</strong> Books are issued for up to 30 days. Please return on or before the due date.
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2">

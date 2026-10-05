@@ -32,12 +32,8 @@ export const IssuedBooks: React.FC = () => {
   const handleReturn = async (lendingId: string, bookTitle: string) => {
     if (!window.confirm(`Confirm return of "${bookTitle}"?`)) return;
     try {
-      const res = await api.post(`/lending/return/${lendingId}`);
-      if (res.data.fine > 0) {
-        toast.success(`Book returned! Collected fine of ₹${res.data.fine}`, { duration: 5000 });
-      } else {
-        toast.success(`Book "${bookTitle}" returned successfully!`);
-      }
+      await api.post(`/lending/return/${lendingId}`);
+      toast.success(`Book "${bookTitle}" returned successfully!`);
       fetchLendings();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to process return');
@@ -109,7 +105,7 @@ export const IssuedBooks: React.FC = () => {
                 <th className="py-3.5 px-4">Borrower Info</th>
                 <th className="py-3.5 px-4">Issued On</th>
                 <th className="py-3.5 px-4">Due Date</th>
-                <th className="py-3.5 px-4">Overdue / Fine</th>
+                <th className="py-3.5 px-4">Overdue Status</th>
                 <th className="py-3.5 px-4 text-right">Action</th>
               </tr>
             </thead>
@@ -134,7 +130,6 @@ export const IssuedBooks: React.FC = () => {
                   const daysOverdue = isOverdue
                     ? Math.ceil((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
                     : 0;
-                  const fine = daysOverdue * 2; // ₹2/day
 
                   return (
                     <tr key={l.id} className="hover:bg-slate-50 transition">
@@ -180,9 +175,6 @@ export const IssuedBooks: React.FC = () => {
                             <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-red-50 text-red-700 px-2 py-0.5 rounded-full border border-red-200">
                               <AlertTriangle className="w-3 h-3" />
                               {daysOverdue} Days Late
-                            </span>
-                            <span className="block text-[11px] font-bold text-red-600 mt-0.5">
-                              Fine: ₹{fine}
                             </span>
                           </div>
                         ) : (
