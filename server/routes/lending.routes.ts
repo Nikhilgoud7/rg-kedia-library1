@@ -1,5 +1,12 @@
 import { Router, Response } from 'express';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import {
+  MAX_ACTIVE_BORROWS_STUDENT,
+  LOAN_PERIOD_DAYS,
+  RENEWAL_DAYS,
+  MAX_RENEWALS,
+  FINE_PER_DAY,
+} from '../lib/lendingPolicy.js';
 
 const router = Router();
 
@@ -23,6 +30,35 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
     if (book.availableCopies <= 0) {
       res.status(400).json({ error: 'No copies available. All copies are currently issued.' });
       return;
+    }
+
+    // STUDENT role policy enforcement
+    if (req.user!.role === 'STUDENT') {
+      const activeLendingsCount = await prisma.lending.count({
+        where: { userId: req.user!.id, status: 'ISSUED' },
+      });
+      const pendingRequestsCount = await prisma.bookRequest.count({
+        where: { userId: req.user!.id, status: 'PENDING', type: 'BORROW' },
+      });
+
+      if (activeLendingsCount + pendingRequestsCount >= MAX_ACTIVE_BORROWS_STUDENT) {
+        res.status(400).json({ error: 'Maximum limit of 3 books reached' });
+        return;
+      }
+
+      const now = new Date();
+      const hasOverdue = await prisma.lending.findFirst({
+        where: {
+          userId: req.user!.id,
+          status: 'ISSUED',
+          dueDate: { lt: now },
+        },
+      });
+
+      if (hasOverdue) {
+        res.status(400).json({ error: 'Cannot request new books while holding overdue items' });
+        return;
+      }
     }
 
     // Check if user already has a pending request for this book
@@ -49,21 +85,48 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
       return;
     }
 
-    const request = await prisma.bookRequest.create({
-      data: {
-        userId: req.user!.id,
-        bookId,
-        type: 'BORROW',
-        message: message || null,
-      },
-      include: {
-        book: { select: { title: true, author: true } },
-        user: { select: { name: true, rollNumber: true } },
-      },
+    // Race-safe creation inside transaction
+    const request = await prisma.$transaction(async (tx) => {
+      const created = await tx.bookRequest.create({
+        data: {
+          userId: req.user!.id,
+          bookId,
+          type: 'BORROW',
+          message: message || null,
+        },
+        include: {
+          book: { select: { title: true, author: true } },
+          user: { select: { name: true, rollNumber: true } },
+        },
+      });
+
+      // Re-verify duplicate pending requests
+      const dupCount = await tx.bookRequest.count({
+        where: { userId: req.user!.id, bookId, status: 'PENDING', type: 'BORROW' },
+      });
+      if (dupCount > 1) {
+        throw { status: 400, error: 'You already have a pending request for this book.' };
+      }
+
+      // Re-verify limit for STUDENT
+      if (req.user!.role === 'STUDENT') {
+        const totalActive =
+          (await tx.lending.count({ where: { userId: req.user!.id, status: 'ISSUED' } })) +
+          (await tx.bookRequest.count({ where: { userId: req.user!.id, status: 'PENDING', type: 'BORROW' } }));
+        if (totalActive > MAX_ACTIVE_BORROWS_STUDENT) {
+          throw { status: 400, error: 'Maximum limit of 3 books reached' };
+        }
+      }
+
+      return created;
     });
 
     res.status(201).json({ request });
-  } catch (error) {
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
     console.error('Request borrow error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
@@ -114,65 +177,103 @@ router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LI
 // POST /api/lending/approve/:requestId - Librarian approves and issues a book
 router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { daysToReturn = 14 } = req.body;
-
-    const request = await prisma.bookRequest.findUnique({
-      where: { id: req.params.requestId },
-      include: { book: true, user: true },
-    });
-
-    if (!request || request.status !== 'PENDING' || request.type !== 'BORROW') {
-      res.status(404).json({ error: 'Pending borrow request not found.' });
-      return;
+    const rawDays = req.body.daysToReturn;
+    let daysToReturn = LOAN_PERIOD_DAYS;
+    if (rawDays !== undefined && rawDays !== null && rawDays !== '') {
+      const parsed = parseInt(String(rawDays), 10);
+      if (isNaN(parsed) || parsed < 1 || parsed > 365) {
+        res.status(400).json({ error: 'Invalid daysToReturn value. Must be an integer between 1 and 365.' });
+        return;
+      }
+      daysToReturn = parsed;
     }
 
-    // Find an available copy
-    const availableCopy = await prisma.bookCopy.findFirst({
-      where: { bookId: request.bookId, status: 'AVAILABLE' },
-    });
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.bookRequest.findUnique({
+        where: { id: req.params.requestId },
+        include: { book: true, user: true },
+      });
 
-    if (!availableCopy) {
-      res.status(400).json({ error: 'No copies available to issue.' });
-      return;
-    }
+      if (!request) {
+        throw { status: 404, error: 'Pending borrow request not found.' };
+      }
 
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + parseInt(daysToReturn));
-
-    // Transaction: approve request + issue book + update copy status + update available count
-    const [updatedRequest, lending] = await prisma.$transaction([
-      prisma.bookRequest.update({
-        where: { id: request.id },
+      // Conditional claim on request
+      const claimedRequest = await tx.bookRequest.updateMany({
+        where: { id: request.id, status: 'PENDING', type: 'BORROW' },
         data: { status: 'APPROVED', respondedById: req.user!.id },
-      }),
-      prisma.lending.create({
+      });
+
+      if (claimedRequest.count === 0) {
+        throw { status: 409, error: 'Request already processed' };
+      }
+
+      // Pick an AVAILABLE copy inside transaction and claim it
+      const availableCopies = await tx.bookCopy.findMany({
+        where: { bookId: request.bookId, status: 'AVAILABLE' },
+      });
+
+      let claimedCopyId: string | null = null;
+      for (const copy of availableCopies) {
+        const copyClaim = await tx.bookCopy.updateMany({
+          where: { id: copy.id, status: 'AVAILABLE' },
+          data: { status: 'ISSUED' },
+        });
+        if (copyClaim.count === 1) {
+          claimedCopyId = copy.id;
+          break;
+        }
+      }
+
+      if (!claimedCopyId) {
+        throw { status: 400, error: 'No copies available to issue.' };
+      }
+
+      // Conditional claim on Book.availableCopies
+      const bookClaim = await tx.book.updateMany({
+        where: { id: request.bookId, availableCopies: { gt: 0 } },
+        data: { availableCopies: { decrement: 1 } },
+      });
+
+      if (bookClaim.count === 0) {
+        throw { status: 400, error: 'No copies available to issue.' };
+      }
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + daysToReturn);
+
+      const lending = await tx.lending.create({
         data: {
           userId: request.userId,
-          bookCopyId: availableCopy.id,
+          bookCopyId: claimedCopyId,
           dueDate,
           issuedById: req.user!.id,
         },
-      }),
-      prisma.bookCopy.update({
-        where: { id: availableCopy.id },
-        data: { status: 'ISSUED' },
-      }),
-      prisma.book.update({
-        where: { id: request.bookId },
-        data: { availableCopies: { decrement: 1 } },
-      }),
-      prisma.notification.create({
+      });
+
+      await tx.notification.create({
         data: {
           userId: request.userId,
           title: 'Book Request Approved',
           message: `Your request for "${request.book.title}" has been approved. Please collect it from the library. Due date: ${dueDate.toLocaleDateString()}.`,
           type: 'APPROVAL',
         },
-      }),
-    ]);
+      });
 
-    res.json({ request: updatedRequest, lending, message: 'Book issued successfully.' });
-  } catch (error) {
+      const updatedRequest = await tx.bookRequest.findUnique({
+        where: { id: request.id },
+        include: { book: true, user: true },
+      });
+
+      return { request: updatedRequest, lending };
+    });
+
+    res.json({ request: result.request, lending: result.lending, message: 'Book issued successfully.' });
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
     console.error('Approve request error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
@@ -183,32 +284,43 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
   try {
     const { reason } = req.body;
 
-    const request = await prisma.bookRequest.findUnique({
-      where: { id: req.params.requestId },
-      include: { book: true },
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.bookRequest.findUnique({
+        where: { id: req.params.requestId },
+        include: { book: true },
+      });
+
+      if (!request) {
+        throw { status: 404, error: 'Pending request not found.' };
+      }
+
+      const claimed = await tx.bookRequest.updateMany({
+        where: { id: request.id, status: 'PENDING' },
+        data: { status: 'REJECTED', responseMessage: reason || null, respondedById: req.user!.id },
+      });
+
+      if (claimed.count === 0) {
+        throw { status: 409, error: 'Request already processed' };
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: request.userId,
+          title: 'Book Request Rejected',
+          message: `Your request for "${request.book.title}" was not approved. ${reason || ''}`,
+          type: 'INFO',
+        },
+      });
+
+      return await tx.bookRequest.findUnique({ where: { id: request.id } });
     });
 
-    if (!request || request.status !== 'PENDING') {
-      res.status(404).json({ error: 'Pending request not found.' });
+    res.json({ request: result });
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
       return;
     }
-
-    const updatedRequest = await prisma.bookRequest.update({
-      where: { id: request.id },
-      data: { status: 'REJECTED', responseMessage: reason || null, respondedById: req.user!.id },
-    });
-
-    await prisma.notification.create({
-      data: {
-        userId: request.userId,
-        title: 'Book Request Rejected',
-        message: `Your request for "${request.book.title}" was not approved. ${reason || ''}`,
-        type: 'INFO',
-      },
-    });
-
-    res.json({ request: updatedRequest });
-  } catch (error) {
     console.error('Reject request error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
@@ -217,64 +329,82 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
 // POST /api/lending/return/:lendingId - Librarian marks book as returned
 router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const lending = await prisma.lending.findUnique({
-      where: { id: req.params.lendingId },
-      include: { bookCopy: { include: { book: true } } },
-    });
-
-    if (!lending || lending.status === 'RETURNED') {
-      res.status(404).json({ error: 'Active lending not found.' });
-      return;
-    }
-
-    // Calculate fine if overdue (₹2 per day)
     const now = new Date();
-    let fine = 0;
-    if (now > lending.dueDate) {
-      const daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      fine = daysOverdue * 2; // ₹2 per day
-    }
 
-    await prisma.$transaction([
-      prisma.lending.update({
-        where: { id: lending.id },
+    const result = await prisma.$transaction(async (tx) => {
+      const lending = await tx.lending.findUnique({
+        where: { id: req.params.lendingId },
+        include: { bookCopy: { include: { book: true } } },
+      });
+
+      if (!lending) {
+        throw { status: 404, error: 'Active lending not found.' };
+      }
+
+      let fine = 0;
+      if (now > lending.dueDate) {
+        const daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        fine = daysOverdue * FINE_PER_DAY;
+      }
+
+      const claimedLending = await tx.lending.updateMany({
+        where: { id: lending.id, status: 'ISSUED' },
         data: { status: 'RETURNED', returnedDate: now, fine },
-      }),
-      prisma.bookCopy.update({
-        where: { id: lending.bookCopyId },
+      });
+
+      if (claimedLending.count === 0) {
+        throw { status: 409, error: 'Lending already returned.' };
+      }
+
+      await tx.bookCopy.updateMany({
+        where: { id: lending.bookCopyId, status: 'ISSUED' },
         data: { status: 'AVAILABLE' },
-      }),
-      prisma.book.update({
-        where: { id: lending.bookCopy.bookId },
+      });
+
+      const totalCopies = lending.bookCopy.book.totalCopies;
+      const bookClaim = await tx.book.updateMany({
+        where: { id: lending.bookCopy.bookId, availableCopies: { lt: totalCopies } },
         data: { availableCopies: { increment: 1 } },
-      }),
-      prisma.notification.create({
+      });
+
+      if (bookClaim.count === 0) {
+        console.warn(`Book ${lending.bookCopy.bookId} availableCopies increment guarded: already at totalCopies (${totalCopies})`);
+      }
+
+      await tx.notification.create({
         data: {
           userId: lending.userId,
           title: 'Book Returned',
           message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${fine > 0 ? ` Overdue fine: ₹${fine}.` : ''}`,
           type: 'INFO',
         },
-      }),
-    ]);
+      });
 
-    // Fulfill any pending return requests for this book & student
-    await prisma.bookRequest.updateMany({
-      where: {
-        bookId: lending.bookCopy.bookId,
-        userId: lending.userId,
-        type: 'RETURN_REQUEST',
-        status: 'PENDING',
-      },
-      data: { status: 'APPROVED' },
+      // Fulfill any pending return requests for this book & student
+      await tx.bookRequest.updateMany({
+        where: {
+          bookId: lending.bookCopy.bookId,
+          userId: lending.userId,
+          type: 'RETURN_REQUEST',
+          status: 'PENDING',
+        },
+        data: { status: 'APPROVED' },
+      });
+
+      return { fine };
     });
 
+    const fine = result.fine;
     res.json({
       message: 'Book returned successfully.',
       fine,
-      fineMessage: fine > 0 ? `Fine of ₹${fine} for ${Math.ceil(fine / 2)} days overdue.` : null,
+      fineMessage: fine > 0 ? `Fine of ₹${fine} for ${Math.ceil(fine / FINE_PER_DAY)} days overdue.` : null,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
     console.error('Return book error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
@@ -304,9 +434,9 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
 
       if (!isReturned && isOverdue) {
         daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        calculatedFine = daysOverdue * 2; // ₹2 per day policy
+        calculatedFine = daysOverdue * FINE_PER_DAY;
       } else if (isReturned && lending.fine > 0) {
-        daysOverdue = Math.ceil(lending.fine / 2);
+        daysOverdue = Math.ceil(lending.fine / FINE_PER_DAY);
       }
 
       return {
@@ -314,11 +444,29 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
         isOverdue,
         daysOverdue,
         fine: calculatedFine,
-        finePolicy: '₹2 per overdue day',
+        finePolicy: `₹${FINE_PER_DAY} per overdue day`,
       };
     });
 
-    res.json({ lendings: formattedLendings });
+    const activeLoans = lendings.filter((l) => l.status === 'ISSUED').length;
+    const pendingRequests = await prisma.bookRequest.count({
+      where: { userId: req.user!.id, status: 'PENDING', type: 'BORROW' },
+    });
+
+    res.json({
+      lendings: formattedLendings,
+      limits: {
+        maxActiveBorrows: MAX_ACTIVE_BORROWS_STUDENT,
+        loanPeriodDays: LOAN_PERIOD_DAYS,
+        renewalDays: RENEWAL_DAYS,
+        maxRenewals: MAX_RENEWALS,
+        finePerDay: FINE_PER_DAY,
+      },
+      usage: {
+        activeLoans,
+        pendingRequests,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }
