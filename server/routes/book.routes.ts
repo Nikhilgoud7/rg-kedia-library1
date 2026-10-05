@@ -7,28 +7,43 @@ const router = Router();
 router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { search, program, branch, category, segment, page = '1', limit = '20' } = req.query;
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    // Reject array or object parameters
+    const queryParams = [search, program, branch, category, segment, page, limit];
+    for (const param of queryParams) {
+      if (param !== undefined && (Array.isArray(param) || typeof param === 'object')) {
+        res.status(400).json({ error: 'Invalid query parameter.' });
+        return;
+      }
+    }
+
+    const parsedPage = Math.max(1, parseInt(page as string, 10) || 1);
+    const rawLimit = parseInt(limit as string, 10) || 20;
+    const parsedLimit = Math.min(100, Math.max(1, rawLimit));
+    const skip = (parsedPage - 1) * parsedLimit;
 
     const where: any = {};
 
-    if (search) {
-      where.OR = [
-        { title: { contains: search as string } },
-        { author: { contains: search as string } },
-        { isbn: { contains: search as string } },
-        { segment: { contains: search as string } },
-      ];
+    if (search && typeof search === 'string') {
+      const trimmedSearch = search.trim().substring(0, 100);
+      if (trimmedSearch.length > 0) {
+        where.OR = [
+          { title: { contains: trimmedSearch } },
+          { author: { contains: trimmedSearch } },
+          { isbn: { contains: trimmedSearch } },
+          { segment: { contains: trimmedSearch } },
+        ];
+      }
     }
 
-    if (category) where.category = category;
-    if (segment) where.segment = segment;
+    if (category && typeof category === 'string') where.category = category;
+    if (segment && typeof segment === 'string') where.segment = segment;
 
-    // Filter by program/branch through BookProgram relation
-    if (program || branch) {
+    if ((program && typeof program === 'string') || (branch && typeof branch === 'string')) {
       where.bookPrograms = {
         some: {
-          ...(program ? { program: program as string } : {}),
-          ...(branch ? { branch: branch as string } : {}),
+          ...(program && typeof program === 'string' ? { program } : {}),
+          ...(branch && typeof branch === 'string' ? { branch } : {}),
         },
       };
     }
@@ -42,19 +57,21 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
           _count: { select: { copies: true, requests: true } },
         },
         skip,
-        take: parseInt(limit as string),
-        orderBy: { title: 'asc' },
+        take: parsedLimit,
+        orderBy: [{ title: 'asc' }, { id: 'asc' }],
       }),
       prisma.book.count({ where }),
     ]);
+
+    const totalPages = Math.ceil(total / parsedLimit) || 1;
 
     res.json({
       books,
       pagination: {
         total,
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        totalPages: Math.ceil(total / parseInt(limit as string)),
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages,
       },
     });
   } catch (error) {
@@ -107,18 +124,40 @@ router.get('/segments', authenticate, async (_req: AuthRequest, res: Response): 
 // GET /api/books/:id - Book details
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userRole = req.user?.role;
+
+    let copiesInclude: any = false;
+
+    if (userRole === 'LIBRARIAN') {
+      copiesInclude = {
+        include: {
+          lendings: {
+            where: { status: 'ISSUED' },
+            include: { user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } } },
+          },
+        },
+      };
+    } else if (userRole === 'TEACHER') {
+      copiesInclude = {
+        include: {
+          lendings: {
+            where: { status: 'ISSUED' },
+            include: { user: { select: { id: true, name: true, rollNumber: true } } },
+          },
+        },
+      };
+    } else {
+      // STUDENT role: include copies without lendings or borrower identities
+      copiesInclude = {
+        select: { id: true, copyNumber: true, condition: true, status: true, barcode: true },
+      };
+    }
+
     const book = await prisma.book.findUnique({
       where: { id: req.params.id },
       include: {
         bookPrograms: true,
-        copies: {
-          include: {
-            lendings: {
-              where: { status: 'ISSUED' },
-              include: { user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } } },
-            },
-          },
-        },
+        copies: copiesInclude,
       },
     });
 
