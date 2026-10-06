@@ -427,7 +427,7 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
     const lending = await prisma.lending.findUnique({
       where: { id: lendingId },
       include: {
-        bookCopy: { include: { book: { select: { title: true, author: true } } } },
+        bookCopy: { include: { book: { select: { id: true, title: true, author: true } } } },
       },
     });
 
@@ -441,8 +441,32 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
       return;
     }
 
-    if (now > lending.dueDate) {
-      res.status(400).json({ error: 'Cannot renew overdue items.' });
+    // Check if user has ANY overdue active loans (reusing overdue policy check pattern)
+    const hasOverdue = await prisma.lending.findFirst({
+      where: {
+        userId: req.user!.id,
+        status: 'ISSUED',
+        dueDate: { lt: now },
+      },
+    });
+
+    if (hasOverdue) {
+      res.status(400).json({ error: 'Cannot renew books while holding overdue items.' });
+      return;
+    }
+
+    // Check if there is a pending return request for this book
+    const pendingReturnRequest = await prisma.bookRequest.findFirst({
+      where: {
+        userId: req.user!.id,
+        bookId: lending.bookCopy.bookId,
+        type: 'RETURN_REQUEST',
+        status: 'PENDING',
+      },
+    });
+
+    if (pendingReturnRequest) {
+      res.status(400).json({ error: 'Cannot renew a book with a pending return request.' });
       return;
     }
 
@@ -455,11 +479,6 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
     newDueDate.setDate(newDueDate.getDate() + RENEWAL_DAYS);
 
     const result = await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: req.user!.id },
-        data: { updatedAt: new Date() },
-      });
-
       const updated = await tx.lending.updateMany({
         where: {
           id: lendingId,

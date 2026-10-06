@@ -10,6 +10,7 @@ export const MyBorrowings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ISSUED' | 'REQUESTS' | 'HISTORY'>('ISSUED');
   const [loading, setLoading] = useState(true);
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [policyLimits, setPolicyLimits] = useState<{ maxRenewals?: number; renewalDays?: number } | null>(null);
 
   const handleRenew = async (lendingId: string) => {
     try {
@@ -32,6 +33,7 @@ export const MyBorrowings: React.FC = () => {
         api.get('/lending/my-requests'),
       ]);
       setLendings(lendingsRes.data.lendings || []);
+      setPolicyLimits(lendingsRes.data.limits || null);
       setRequests(requestsRes.data.requests || []);
     } catch (err) {
       console.error(err);
@@ -171,9 +173,9 @@ export const MyBorrowings: React.FC = () => {
                       <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
                         Overdue — Cannot Renew
                       </span>
-                    ) : (lending.renewalCount || 0) >= 1 ? (
+                    ) : (lending.renewalCount || 0) >= (policyLimits?.maxRenewals ?? 1) ? (
                       <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                        Max Renewals Reached (1/1)
+                        Max Renewals Reached ({lending.renewalCount || 0}/{policyLimits?.maxRenewals ?? 1})
                       </span>
                     ) : (
                       <button
@@ -182,7 +184,7 @@ export const MyBorrowings: React.FC = () => {
                         className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl text-xs transition shadow-xs inline-flex items-center gap-1.5 disabled:opacity-50"
                       >
                         <RotateCw className={`w-3.5 h-3.5 ${renewingId === lending.id ? 'animate-spin' : ''}`} />
-                        <span>{renewingId === lending.id ? 'Renewing...' : 'Renew Loan (+30 Days)'}</span>
+                        <span>{renewingId === lending.id ? 'Renewing...' : `Renew Loan (+${policyLimits?.renewalDays ?? 30} Days)`}</span>
                       </button>
                     )}
                   </div>
