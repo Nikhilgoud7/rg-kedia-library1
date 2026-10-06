@@ -74,6 +74,7 @@ export interface Lending {
   returnedDate?: string | null;
   status: 'ISSUED' | 'RETURNED' | 'OVERDUE';
   fine: number;
+  renewalCount: number;
   isOverdue?: boolean;
   daysOverdue?: number;
   issuedById?: string | null;

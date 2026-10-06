@@ -101,6 +101,7 @@ model Lending {
   returnedDate DateTime?
   status       String    @default("ISSUED") // ISSUED | RETURNED | OVERDUE
   fine         Float     @default(0)
+  renewalCount Int       @default(0)
   issuedById   String?   // Librarian who issued
   notes        String?
   createdAt    DateTime  @default(now())

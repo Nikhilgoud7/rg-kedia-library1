@@ -413,6 +413,104 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
   }
 });
 
+// POST /api/lending/renew/:lendingId - Student/Teacher renews an active loan
+router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (req.user!.role === 'LIBRARIAN') {
+      res.status(403).json({ error: 'Access denied. Librarians cannot renew personal loans.' });
+      return;
+    }
+
+    const lendingId = req.params.lendingId;
+    const now = new Date();
+
+    const lending = await prisma.lending.findUnique({
+      where: { id: lendingId },
+      include: {
+        bookCopy: { include: { book: { select: { title: true, author: true } } } },
+      },
+    });
+
+    if (!lending || lending.userId !== req.user!.id) {
+      res.status(404).json({ error: 'Active lending not found.' });
+      return;
+    }
+
+    if (lending.status !== 'ISSUED') {
+      res.status(400).json({ error: 'Only active loans can be renewed.' });
+      return;
+    }
+
+    if (now > lending.dueDate) {
+      res.status(400).json({ error: 'Cannot renew overdue items.' });
+      return;
+    }
+
+    if (lending.renewalCount >= MAX_RENEWALS) {
+      res.status(400).json({ error: `Maximum limit of ${MAX_RENEWALS} renewal(s) reached.` });
+      return;
+    }
+
+    const newDueDate = new Date(lending.dueDate);
+    newDueDate.setDate(newDueDate.getDate() + RENEWAL_DAYS);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: req.user!.id },
+        data: { updatedAt: new Date() },
+      });
+
+      const updated = await tx.lending.updateMany({
+        where: {
+          id: lendingId,
+          userId: req.user!.id,
+          status: 'ISSUED',
+          dueDate: { gte: now },
+          renewalCount: { lt: MAX_RENEWALS },
+        },
+        data: {
+          dueDate: newDueDate,
+          renewalCount: { increment: 1 },
+        },
+      });
+
+      if (updated.count === 0) {
+        throw { status: 400, error: 'Renewal failed. Loan is no longer eligible for renewal.' };
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: req.user!.id,
+          title: 'Book Loan Renewed',
+          message: `"${lending.bookCopy.book.title}" loan has been extended by ${RENEWAL_DAYS} days. New due date: ${newDueDate.toLocaleDateString()}.`,
+          type: 'INFO',
+        },
+      });
+
+      return await tx.lending.findUnique({
+        where: { id: lendingId },
+        include: {
+          bookCopy: {
+            include: { book: { select: { id: true, title: true, author: true, segment: true, category: true, shelfLocation: true } } },
+          },
+        },
+      });
+    });
+
+    res.json({
+      message: `Loan renewed successfully by ${RENEWAL_DAYS} days.`,
+      lending: result,
+    });
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Renew loan error:', error);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
 // GET /api/lending/my-books - Current user's borrowed books
 router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {

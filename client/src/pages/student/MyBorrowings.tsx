@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../lib/api';
 import { Lending, BookRequest } from '../../types';
-import { BookmarkCheck, Clock, AlertTriangle, CheckCircle2, XCircle, BookOpen, Layers } from 'lucide-react';
+import { BookmarkCheck, Clock, AlertTriangle, CheckCircle2, XCircle, BookOpen, Layers, RotateCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const MyBorrowings: React.FC = () => {
@@ -9,6 +9,20 @@ export const MyBorrowings: React.FC = () => {
   const [requests, setRequests] = useState<BookRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'ISSUED' | 'REQUESTS' | 'HISTORY'>('ISSUED');
   const [loading, setLoading] = useState(true);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
+
+  const handleRenew = async (lendingId: string) => {
+    try {
+      setRenewingId(lendingId);
+      const res = await api.post(`/lending/renew/${lendingId}`);
+      toast.success(res.data.message || 'Loan renewed successfully!');
+      await fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to renew loan');
+    } finally {
+      setRenewingId(null);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -129,7 +143,7 @@ export const MyBorrowings: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="flex flex-col items-end gap-3 text-right">
                     {isOverdue ? (
                       <div className="p-3 bg-red-100 rounded-xl border border-red-200 text-right inline-block">
                         <div className="flex items-center justify-end gap-1 text-xs font-bold text-red-800">
@@ -150,6 +164,26 @@ export const MyBorrowings: React.FC = () => {
                           Please return by {dueDate.toLocaleDateString()}
                         </p>
                       </div>
+                    )}
+
+                    {/* Renew Action / Status */}
+                    {isOverdue ? (
+                      <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
+                        Overdue — Cannot Renew
+                      </span>
+                    ) : (lending.renewalCount || 0) >= 1 ? (
+                      <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                        Max Renewals Reached (1/1)
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRenew(lending.id)}
+                        disabled={renewingId === lending.id}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl text-xs transition shadow-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <RotateCw className={`w-3.5 h-3.5 ${renewingId === lending.id ? 'animate-spin' : ''}`} />
+                        <span>{renewingId === lending.id ? 'Renewing...' : 'Renew Loan (+30 Days)'}</span>
+                      </button>
                     )}
                   </div>
                 </div>

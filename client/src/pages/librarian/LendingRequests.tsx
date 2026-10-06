@@ -143,24 +143,32 @@ export const LendingRequests: React.FC = () => {
 
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                <button
-                  onClick={() => {
-                    setSelectedRequest(req);
-                    setIsRejectModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition border border-red-200"
-                >
-                  <X className="w-4 h-4 inline mr-1" />
-                  Reject
-                </button>
+                {req.type === 'RETURN_REQUEST' ? (
+                  <span className="px-3.5 py-2 text-xs font-semibold text-amber-900 bg-amber-50 rounded-xl border border-amber-200 inline-block">
+                    Return Notice Sent (Pending Student Return)
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedRequest(req);
+                        setIsRejectModalOpen(true);
+                      }}
+                      className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition border border-red-200"
+                    >
+                      <X className="w-4 h-4 inline mr-1" />
+                      Reject
+                    </button>
 
-                <button
-                  onClick={() => handleApprove(req)}
-                  className="px-4 py-2 text-xs font-extrabold text-slate-950 bg-amber-500 hover:bg-amber-600 rounded-xl transition shadow-xs flex items-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  Approve & Issue Book
-                </button>
+                    <button
+                      onClick={() => handleApprove(req)}
+                      className="px-4 py-2 text-xs font-extrabold text-slate-950 bg-amber-500 hover:bg-amber-600 rounded-xl transition shadow-xs flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      Approve & Issue Book
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))
