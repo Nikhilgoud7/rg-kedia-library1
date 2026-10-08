@@ -18,7 +18,7 @@ export const TeacherDashboard: React.FC = () => {
       try {
         setLoading(true);
         const [myBooksRes, allLendingsRes] = await Promise.all([
-          api.get('/lending/my-books'),
+          api.get('/lending/my-books', { params: { status: 'ISSUED', limit: 50 } }),
           api.get('/lending/all'),
         ]);
         setBorrowedBooks(

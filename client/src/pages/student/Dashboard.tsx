@@ -43,7 +43,7 @@ export const StudentDashboard: React.FC = () => {
     try {
       setLoading(true);
       const [lendingsSettled, booksSettled, papersSettled, notifSettled] = await Promise.allSettled([
-        api.get('/lending/my-books'),
+        api.get('/lending/my-books', { params: { status: 'ISSUED', limit: 50 } }),
         api.get('/books', {
           params: {
             program: user?.program || undefined,

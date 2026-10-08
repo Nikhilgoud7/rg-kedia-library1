@@ -569,8 +569,12 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
     if (isNaN(limit) || limit < 1) limit = 20;
     if (limit > 50) limit = 50;
 
+    const now = new Date();
     const where: any = { userId: req.user!.id };
-    if (statusRaw && ['ISSUED', 'RETURNED', 'OVERDUE'].includes(statusRaw)) {
+    if (statusRaw === 'OVERDUE') {
+      where.status = 'ISSUED';
+      where.dueDate = { lt: now };
+    } else if (statusRaw && ['ISSUED', 'RETURNED'].includes(statusRaw)) {
       where.status = statusRaw;
     }
 
@@ -587,8 +591,6 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
       skip: (page - 1) * limit,
       take: limit,
     });
-
-    const now = new Date();
 
     const formattedLendings = lendings.map((lending) => {
       const isReturned = lending.status === 'RETURNED';
