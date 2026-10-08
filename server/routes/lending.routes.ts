@@ -135,6 +135,24 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
         }
       }
 
+      // Notify all active librarians of new borrow request
+      const librarians = await tx.user.findMany({
+        where: { role: 'LIBRARIAN', active: true },
+        select: { id: true },
+      });
+
+      for (const lib of librarians) {
+        await tx.notification.create({
+          data: {
+            userId: lib.id,
+            title: 'New Borrow Request',
+            message: `${req.user!.name} requested "${created.book.title}".`,
+            type: 'REQUEST',
+            link: '/librarian/lending-requests',
+          },
+        });
+      }
+
       return created;
     });
 
@@ -181,6 +199,7 @@ router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LI
         title: 'Return Request',
         message: `Please return "${lending.bookCopy.book.title}" as soon as possible. ${message || ''}`,
         type: 'REQUEST',
+        link: lending.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
       },
     });
 
@@ -287,6 +306,7 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
           title: 'Book Request Approved',
           message: `Your request for "${request.book.title}" has been approved. Please collect it from the library. Due date: ${dueDate.toLocaleDateString()}.`,
           type: 'APPROVAL',
+          link: request.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
       });
 
@@ -317,7 +337,7 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
     const result = await prisma.$transaction(async (tx) => {
       const request = await tx.bookRequest.findUnique({
         where: { id: req.params.requestId },
-        include: { book: true },
+        include: { book: true, user: true },
       });
 
       if (!request) {
@@ -339,6 +359,7 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
           title: 'Book Request Rejected',
           message: `Your request for "${request.book.title}" was not approved. ${reason || ''}`,
           type: 'INFO',
+          link: request.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
       });
 
@@ -364,7 +385,7 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
     const result = await prisma.$transaction(async (tx) => {
       const lending = await tx.lending.findUnique({
         where: { id: req.params.lendingId },
-        include: { bookCopy: { include: { book: true } } },
+        include: { bookCopy: { include: { book: true } }, user: true },
       });
 
       if (!lending) {
@@ -406,6 +427,7 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
           title: 'Book Returned',
           message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`,
           type: 'INFO',
+          link: lending.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
       });
 
@@ -528,6 +550,7 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
           title: 'Book Loan Renewed',
           message: `"${lending.bookCopy.book.title}" loan has been extended by ${RENEWAL_DAYS} days. New due date: ${newDueDate.toLocaleDateString()}.`,
           type: 'INFO',
+          link: req.user!.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
       });
 
@@ -815,15 +838,138 @@ router.get('/requests', authenticate, authorize('LIBRARIAN'), async (_req: AuthR
   }
 });
 
+const lastNotifCheckMap = new Map<string, number>();
+
 // GET /api/lending/notifications - Current user's notifications
 router.get('/notifications', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userId = req.user!.id;
+    const now = new Date();
+
+    // In-memory throttle for lazy due-soon / overdue notification creation (at most once every 10 min per user)
+    const lastCheck = lastNotifCheckMap.get(userId) || 0;
+    if (now.getTime() - lastCheck > 10 * 60 * 1000) {
+      lastNotifCheckMap.set(userId, now.getTime());
+
+      if (req.user!.role !== 'LIBRARIAN') {
+        const activeLendings = await prisma.lending.findMany({
+          where: { userId, status: 'ISSUED' },
+          include: { bookCopy: { include: { book: true } } },
+        });
+
+        const userRolePath = req.user!.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings';
+
+        for (const lending of activeLendings) {
+          const dueDate = new Date(lending.dueDate);
+          const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (now > dueDate) {
+            // Overdue notification
+            const dedupeKey = `${userRolePath}?overdue=${lending.id}_${dueDate.toISOString()}`;
+            const existing = await prisma.notification.findFirst({
+              where: { userId, link: dedupeKey },
+            });
+
+            if (!existing) {
+              const daysOverdue = Math.abs(daysLeft);
+              await prisma.notification.create({
+                data: {
+                  userId,
+                  title: 'Overdue Book Warning',
+                  message: `"${lending.bookCopy.book.title}" was due on ${dueDate.toLocaleDateString()} (${daysOverdue} day(s) overdue). Please return it to the library as soon as possible.`,
+                  type: 'OVERDUE',
+                  link: dedupeKey,
+                },
+              });
+            }
+          } else if (daysLeft >= 0 && daysLeft <= 3) {
+            // Due soon notification
+            const dedupeKey = `${userRolePath}?dueSoon=${lending.id}_${dueDate.toISOString()}`;
+            const existing = await prisma.notification.findFirst({
+              where: { userId, link: dedupeKey },
+            });
+
+            if (!existing) {
+              await prisma.notification.create({
+                data: {
+                  userId,
+                  title: 'Book Due Soon',
+                  message: `"${lending.bookCopy.book.title}" is due in ${daysLeft === 0 ? 'today' : `${daysLeft} day(s)`} (${dueDate.toLocaleDateString()}). Please return or renew your loan.`,
+                  type: 'WARNING',
+                  link: dedupeKey,
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const pageRaw = req.query.page;
+    const limitRaw = req.query.limit;
+
+    let page = parseInt(String(pageRaw || '1'), 10);
+    if (isNaN(page) || page < 1) page = 1;
+
+    let limit = parseInt(String(limitRaw || '20'), 10);
+    if (isNaN(limit) || limit < 1) limit = 20;
+    if (limit > 50) limit = 50;
+
+    const total = await prisma.notification.count({ where: { userId } });
+    const unreadCount = await prisma.notification.count({ where: { userId, read: false } });
+
     const notifications = await prisma.notification.findMany({
-      where: { userId: req.user!.id },
+      where: { userId },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      skip: (page - 1) * limit,
+      take: limit,
     });
-    res.json({ notifications });
+
+    res.json({
+      notifications,
+      unreadCount,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    });
+  } catch (error) {
+    console.error('Notifications fetch error:', error);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// DELETE /api/lending/notifications/clear-read - Clear read notifications
+router.delete('/notifications/clear-read', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const deleted = await prisma.notification.deleteMany({
+      where: { userId: req.user!.id, read: true },
+    });
+    res.json({ message: 'Read notifications cleared.', count: deleted.count });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// DELETE /api/lending/notifications/:id - Delete a notification
+router.delete('/notifications/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!notification || notification.userId !== req.user!.id) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+
+    await prisma.notification.delete({
+      where: { id: req.params.id },
+    });
+
+    res.json({ message: 'Notification deleted.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }

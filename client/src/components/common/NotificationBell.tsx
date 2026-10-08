@@ -3,10 +3,11 @@ import { Bell, Check, Clock, AlertTriangle, Info, CheckCircle } from 'lucide-rea
 import api from '../../lib/api';
 import { Notification } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export const NotificationBell: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -16,7 +17,7 @@ export const NotificationBell: React.FC = () => {
       const res = await api.get('/lending/notifications');
       const list: Notification[] = res.data.notifications || [];
       setNotifications(list);
-      setUnreadCount(list.filter((n) => !n.read).length);
+      setUnreadCount(typeof res.data.unreadCount === 'number' ? res.data.unreadCount : list.filter((n) => !n.read).length);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
     }
@@ -28,7 +29,8 @@ export const NotificationBell: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     try {
       await api.put(`/lending/notifications/${id}/read`);
       setNotifications((prev) =>
@@ -37,6 +39,16 @@ export const NotificationBell: React.FC = () => {
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch (err) {
       console.error('Failed to mark read', err);
+    }
+  };
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (!n.read) {
+      await markAsRead(n.id);
+    }
+    setIsOpen(false);
+    if (n.link && typeof n.link === 'string' && n.link.startsWith('/') && !n.link.startsWith('//')) {
+      navigate(n.link);
     }
   };
 
@@ -93,7 +105,8 @@ export const NotificationBell: React.FC = () => {
                 notifications.map((n) => (
                   <div
                     key={n.id}
-                    className={`p-3.5 hover:bg-slate-50 transition flex items-start gap-3 ${
+                    onClick={() => handleNotificationClick(n)}
+                    className={`p-3.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer ${
                       !n.read ? 'bg-amber-50/40' : ''
                     }`}
                   >
@@ -103,7 +116,7 @@ export const NotificationBell: React.FC = () => {
                         <p className="text-xs font-bold text-slate-800">{n.title}</p>
                         {!n.read && (
                           <button
-                            onClick={() => markAsRead(n.id)}
+                            onClick={(e) => markAsRead(n.id, e)}
                             className="text-[10px] text-slate-400 hover:text-slate-700 flex items-center gap-0.5"
                             title="Mark as read"
                           >
