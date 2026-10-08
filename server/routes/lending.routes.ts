@@ -113,6 +113,18 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
         throw { status: 400, error: 'You already have a pending request for this book.' };
       }
 
+      // Re-verify user doesn't already have an active lending for this book
+      const alreadyIssuedTx = await tx.lending.findFirst({
+        where: {
+          userId: req.user!.id,
+          status: 'ISSUED',
+          bookCopy: { bookId },
+        },
+      });
+      if (alreadyIssuedTx) {
+        throw { status: 400, error: 'You already have a copy of this book.' };
+      }
+
       // Re-verify limit for STUDENT
       if (req.user!.role === 'STUDENT') {
         const totalActive =
@@ -211,6 +223,19 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
 
       if (claimedRequest.count === 0) {
         throw { status: 409, error: 'Request already processed' };
+      }
+
+      // Check if user already has an active loan for this book
+      const alreadyIssued = await tx.lending.findFirst({
+        where: {
+          userId: request.userId,
+          status: 'ISSUED',
+          bookCopy: { bookId: request.bookId },
+        },
+      });
+
+      if (alreadyIssued) {
+        throw { status: 400, error: 'User already has an active loan for this book.' };
       }
 
       // Pick an AVAILABLE copy inside transaction and claim it
@@ -533,14 +558,34 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
 // GET /api/lending/my-books - Current user's borrowed books
 router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const pageRaw = req.query.page;
+    const limitRaw = req.query.limit;
+    const statusRaw = req.query.status as string | undefined;
+
+    let page = parseInt(String(pageRaw || '1'), 10);
+    if (isNaN(page) || page < 1) page = 1;
+
+    let limit = parseInt(String(limitRaw || '20'), 10);
+    if (isNaN(limit) || limit < 1) limit = 20;
+    if (limit > 50) limit = 50;
+
+    const where: any = { userId: req.user!.id };
+    if (statusRaw && ['ISSUED', 'RETURNED', 'OVERDUE'].includes(statusRaw)) {
+      where.status = statusRaw;
+    }
+
+    const total = await prisma.lending.count({ where });
+
     const lendings = await prisma.lending.findMany({
-      where: { userId: req.user!.id },
+      where,
       include: {
         bookCopy: {
           include: { book: { select: { id: true, title: true, author: true, segment: true, category: true, shelfLocation: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
     const now = new Date();
@@ -564,13 +609,22 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
       };
     });
 
-    const activeLoans = lendings.filter((l) => l.status === 'ISSUED').length;
+    const activeLoans = await prisma.lending.count({
+      where: { userId: req.user!.id, status: 'ISSUED' },
+    });
+
     const pendingRequests = await prisma.bookRequest.count({
       where: { userId: req.user!.id, status: 'PENDING', type: 'BORROW' },
     });
 
     res.json({
       lendings: formattedLendings,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
       limits: {
         maxActiveBorrows: MAX_ACTIVE_BORROWS_STUDENT,
         loanPeriodDays: LOAN_PERIOD_DAYS,
@@ -590,14 +644,89 @@ router.get('/my-books', authenticate, async (req: AuthRequest, res: Response): P
 // GET /api/lending/my-requests - Current user's book requests
 router.get('/my-requests', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const pageRaw = req.query.page;
+    const limitRaw = req.query.limit;
+    const statusRaw = req.query.status as string | undefined;
+    const typeRaw = req.query.type as string | undefined;
+
+    let page = parseInt(String(pageRaw || '1'), 10);
+    if (isNaN(page) || page < 1) page = 1;
+
+    let limit = parseInt(String(limitRaw || '20'), 10);
+    if (isNaN(limit) || limit < 1) limit = 20;
+    if (limit > 50) limit = 50;
+
+    const where: any = { userId: req.user!.id };
+    if (statusRaw && ['PENDING', 'APPROVED', 'REJECTED'].includes(statusRaw)) {
+      where.status = statusRaw;
+    }
+    if (typeRaw && ['BORROW', 'RETURN_REQUEST'].includes(typeRaw)) {
+      where.type = typeRaw;
+    }
+
+    const total = await prisma.bookRequest.count({ where });
+
     const requests = await prisma.bookRequest.findMany({
-      where: { userId: req.user!.id },
-      include: { book: { select: { id: true, title: true, author: true } } },
+      where,
+      include: { book: { select: { id: true, title: true, author: true, category: true } } },
       orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
-    res.json({ requests });
+    res.json({
+      requests,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    });
   } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// POST /api/lending/cancel-request/:requestId - Student/Teacher cancels their own pending request
+router.post('/cancel-request/:requestId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const requestId = req.params.requestId;
+
+    const request = await prisma.bookRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request || request.userId !== req.user!.id) {
+      res.status(404).json({ error: 'Pending request not found.' });
+      return;
+    }
+
+    if (request.status !== 'PENDING') {
+      res.status(400).json({ error: 'Only pending requests can be cancelled.' });
+      return;
+    }
+
+    const updated = await prisma.bookRequest.updateMany({
+      where: {
+        id: requestId,
+        userId: req.user!.id,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'REJECTED',
+        responseMessage: 'Cancelled by user',
+      },
+    });
+
+    if (updated.count === 0) {
+      res.status(409).json({ error: 'Request is no longer pending.' });
+      return;
+    }
+
+    res.json({ message: 'Request cancelled successfully.' });
+  } catch (error) {
+    console.error('Cancel request error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
 });
