@@ -156,6 +156,7 @@ model Notification {
   type      String   // INFO | WARNING | OVERDUE | REQUEST | APPROVAL
   read      Boolean  @default(false)
   link      String?
+  dismissedAt DateTime?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])

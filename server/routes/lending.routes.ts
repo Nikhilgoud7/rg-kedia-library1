@@ -148,7 +148,7 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
             title: 'New Borrow Request',
             message: `${req.user!.name} requested "${created.book.title}".`,
             type: 'REQUEST',
-            link: '/librarian/lending-requests',
+            link: '/librarian/requests',
           },
         });
       }
@@ -915,11 +915,11 @@ router.get('/notifications', authenticate, async (req: AuthRequest, res: Respons
     if (isNaN(limit) || limit < 1) limit = 20;
     if (limit > 50) limit = 50;
 
-    const total = await prisma.notification.count({ where: { userId } });
-    const unreadCount = await prisma.notification.count({ where: { userId, read: false } });
+    const total = await prisma.notification.count({ where: { userId, dismissedAt: null } });
+    const unreadCount = await prisma.notification.count({ where: { userId, read: false, dismissedAt: null } });
 
     const notifications = await prisma.notification.findMany({
-      where: { userId },
+      where: { userId, dismissedAt: null },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -944,10 +944,27 @@ router.get('/notifications', authenticate, async (req: AuthRequest, res: Respons
 // DELETE /api/lending/notifications/clear-read - Clear read notifications
 router.delete('/notifications/clear-read', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const deleted = await prisma.notification.deleteMany({
-      where: { userId: req.user!.id, read: true },
+    const now = new Date();
+
+    const softDismissed = await prisma.notification.updateMany({
+      where: {
+        userId: req.user!.id,
+        read: true,
+        dismissedAt: null,
+        type: { in: ['OVERDUE', 'WARNING'] },
+      },
+      data: { dismissedAt: now },
     });
-    res.json({ message: 'Read notifications cleared.', count: deleted.count });
+
+    const hardDeleted = await prisma.notification.deleteMany({
+      where: {
+        userId: req.user!.id,
+        read: true,
+        type: { notIn: ['OVERDUE', 'WARNING'] },
+      },
+    });
+
+    res.json({ message: 'Read notifications cleared.', count: softDismissed.count + hardDeleted.count });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }
@@ -960,14 +977,21 @@ router.delete('/notifications/:id', authenticate, async (req: AuthRequest, res: 
       where: { id: req.params.id },
     });
 
-    if (!notification || notification.userId !== req.user!.id) {
+    if (!notification || notification.userId !== req.user!.id || notification.dismissedAt !== null) {
       res.status(404).json({ error: 'Notification not found' });
       return;
     }
 
-    await prisma.notification.delete({
-      where: { id: req.params.id },
-    });
+    if (['OVERDUE', 'WARNING'].includes(notification.type)) {
+      await prisma.notification.update({
+        where: { id: req.params.id },
+        data: { dismissedAt: new Date() },
+      });
+    } else {
+      await prisma.notification.delete({
+        where: { id: req.params.id },
+      });
+    }
 
     res.json({ message: 'Notification deleted.' });
   } catch (error) {
