@@ -20,6 +20,20 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+/**
+ * Local helper function to calculate overdue / due-soon status for a lending.
+ * Threshold for due-soon matches backend lazy WARNING notification threshold (due in <= 3 days).
+ */
+export function getLendingDueStatus(lending: Lending, now = new Date()) {
+  const dueDate = new Date(lending.dueDate);
+  const isOverdue = lending.isOverdue || now > dueDate;
+  const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const isDueSoon = !isOverdue && daysLeft >= 0 && daysLeft <= 3;
+  const daysOverdue = Math.max(1, Math.ceil((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+  return { dueDate, isOverdue, isDueSoon, daysLeft, daysOverdue };
+}
+
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   const isMountedRef = useRef(true);
@@ -28,6 +42,7 @@ export const TeacherDashboard: React.FC = () => {
   const [allIssuedLendings, setAllIssuedLendings] = useState<Lending[]>([]);
   const [pendingRequests, setPendingRequests] = useState<BookRequest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const [myUploadedPapersCount, setMyUploadedPapersCount] = useState<number>(0);
   const [totalPapersCount, setTotalPapersCount] = useState<number>(0);
 
@@ -72,17 +87,25 @@ export const TeacherDashboard: React.FC = () => {
         console.error('Failed to load pending requests:', myRequestsSettled.reason);
       }
 
-      // Process All Student Checkouts
+      // Process All Student Checkouts (Filtered to status === 'ISSUED')
       if (allLendingsSettled.status === 'fulfilled') {
-        setAllIssuedLendings(allLendingsSettled.value.data.lendings || []);
+        const rawAll = allLendingsSettled.value.data.lendings || [];
+        setAllIssuedLendings(rawAll.filter((l: Lending) => l.status === 'ISSUED'));
       } else {
         errors.push('student checkouts');
         console.error('Failed to load student checkouts:', allLendingsSettled.reason);
       }
 
-      // Process Notifications
+      // Process Notifications (Reading unreadCount from server response or fallback to page list)
       if (notifSettled.status === 'fulfilled') {
-        setNotifications(notifSettled.value.data.notifications || []);
+        const notifData = notifSettled.value.data;
+        const notifList = notifData.notifications || [];
+        setNotifications(notifList);
+        if (typeof notifData.unreadCount === 'number') {
+          setUnreadCount(notifData.unreadCount);
+        } else {
+          setUnreadCount(notifList.filter((n: Notification) => !n.read).length);
+        }
       } else {
         errors.push('notifications');
         console.error('Failed to load notifications:', notifSettled.reason);
@@ -123,22 +146,10 @@ export const TeacherDashboard: React.FC = () => {
     };
   }, [fetchData]);
 
-  // Calculations for Overdue / Due Soon faculty loans
+  // Calculations for Overdue / Due Soon faculty loans using local helper
   const now = new Date();
-  const overdueBooks = borrowedBooks.filter(
-    (l) => l.isOverdue || new Date(l.dueDate) < now
-  );
-  const overdueCount = overdueBooks.length;
-
-  const dueSoonBooks = borrowedBooks.filter((l) => {
-    const dueDate = new Date(l.dueDate);
-    const isOverdue = now > dueDate;
-    const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return !isOverdue && daysLeft >= 0 && daysLeft <= 3;
-  });
-  const dueSoonCount = dueSoonBooks.length;
-
-  const unreadNotifs = notifications.filter((n) => !n.read).length;
+  const overdueCount = borrowedBooks.filter((l) => getLendingDueStatus(l, now).isOverdue).length;
+  const dueSoonCount = borrowedBooks.filter((l) => getLendingDueStatus(l, now).isDueSoon).length;
 
   return (
     <div className="space-y-6">
@@ -258,10 +269,10 @@ export const TeacherDashboard: React.FC = () => {
         <Link to="/teacher/notifications" className="block">
           <StatCard
             title="Notifications"
-            value={unreadNotifs}
-            subtitle={unreadNotifs === 1 ? '1 unread alert' : `${unreadNotifs} unread alerts`}
+            value={unreadCount}
+            subtitle={unreadCount === 1 ? '1 unread alert' : `${unreadCount} unread alerts`}
             icon={Bell}
-            color={unreadNotifs > 0 ? 'red' : 'indigo'}
+            color={unreadCount > 0 ? 'red' : 'indigo'}
           />
         </Link>
 
@@ -306,13 +317,9 @@ export const TeacherDashboard: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {borrowedBooks.map((lending) => {
-              const dueDate = new Date(lending.dueDate);
-              const isOverdue = lending.isOverdue || now > dueDate;
-              const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              const isDueSoon = !isOverdue && daysLeft >= 0 && daysLeft <= 3;
-              const daysOverdue = Math.max(
-                1,
-                Math.ceil((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+              const { dueDate, isOverdue, isDueSoon, daysLeft, daysOverdue } = getLendingDueStatus(
+                lending,
+                now
               );
 
               return (
