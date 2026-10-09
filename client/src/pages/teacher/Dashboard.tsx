@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 
 /**
  * Local helper function to calculate overdue / due-soon status for a lending.
+ * Overdue is determined from lending.isOverdue || now > dueDate.
  * Threshold for due-soon matches backend lazy WARNING notification threshold (due in <= 3 days).
  */
 export function getLendingDueStatus(lending: Lending, now = new Date()) {
@@ -70,7 +71,7 @@ export const TeacherDashboard: React.FC = () => {
 
       const errors: string[] = [];
 
-      // Process Faculty Loans
+      // Process Faculty Loans (Includes all active loans: on-time and overdue)
       if (myBooksSettled.status === 'fulfilled') {
         const rawLendings = myBooksSettled.value.data.lendings || [];
         setBorrowedBooks(rawLendings.filter((l: Lending) => l.status === 'ISSUED'));
@@ -87,16 +88,15 @@ export const TeacherDashboard: React.FC = () => {
         console.error('Failed to load pending requests:', myRequestsSettled.reason);
       }
 
-      // Process All Student Checkouts (Filtered to status === 'ISSUED')
+      // Process All Student Checkouts (/lending/all already returns all active loans)
       if (allLendingsSettled.status === 'fulfilled') {
-        const rawAll = allLendingsSettled.value.data.lendings || [];
-        setAllIssuedLendings(rawAll.filter((l: Lending) => l.status === 'ISSUED'));
+        setAllIssuedLendings(allLendingsSettled.value.data.lendings || []);
       } else {
         errors.push('student checkouts');
         console.error('Failed to load student checkouts:', allLendingsSettled.reason);
       }
 
-      // Process Notifications (Reading unreadCount from server response or fallback to page list)
+      // Process Notifications
       if (notifSettled.status === 'fulfilled') {
         const notifData = notifSettled.value.data;
         const notifList = notifData.notifications || [];
