@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import { Lending, BookRequest } from '../../types';
 import { BookmarkCheck, Clock, AlertTriangle, RotateCw, XCircle } from 'lucide-react';
@@ -12,6 +13,9 @@ interface PaginationMeta {
 }
 
 export const MyBorrowings: React.FC = () => {
+  const { user } = useAuth();
+  const isTeacher = user?.role === 'TEACHER';
+
   const [activeLendings, setActiveLendings] = useState<Lending[]>([]);
   const [historyLendings, setHistoryLendings] = useState<Lending[]>([]);
   const [requests, setRequests] = useState<BookRequest[]>([]);
@@ -94,9 +98,13 @@ export const MyBorrowings: React.FC = () => {
       {/* Top Banner */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">My Library Pass & Borrowings</h1>
+          <h1 className="text-2xl font-black text-slate-900">
+            {isTeacher ? 'Faculty Library Pass & Borrowings' : 'My Library Pass & Borrowings'}
+          </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Check your return due dates, pending borrow approvals, and complete lending history
+            {isTeacher
+              ? 'View your reference due dates, pending approvals, and complete lending history'
+              : 'Check your return due dates, pending borrow approvals, and complete lending history'}
           </p>
         </div>
         <div className="flex rounded-xl bg-slate-100 p-1">
@@ -141,7 +149,9 @@ export const MyBorrowings: React.FC = () => {
               <BookmarkCheck className="w-10 h-10 text-slate-300 mx-auto mb-2" />
               <h3 className="text-base font-bold text-slate-800">No Books Currently Issued</h3>
               <p className="text-xs text-slate-500 mt-1">
-                You have zero books currently checked out in your name.
+                {isTeacher
+                  ? 'You have zero books currently checked out under your faculty account.'
+                  : 'You have zero books currently checked out in your name.'}
               </p>
             </div>
           ) : (
