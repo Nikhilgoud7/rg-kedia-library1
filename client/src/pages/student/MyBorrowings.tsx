@@ -333,14 +333,16 @@ export const MyBorrowings: React.FC = () => {
                       <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
                         Under Review
                       </span>
-                      <button
-                        onClick={() => handleCancelRequest(req.id)}
-                        disabled={cancellingId === req.id}
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded-xl text-xs transition shadow-xs disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>{cancellingId === req.id ? 'Cancelling...' : 'Cancel Request'}</span>
-                      </button>
+                      {req.type === 'BORROW' && (
+                        <button
+                          onClick={() => handleCancelRequest(req.id)}
+                          disabled={cancellingId === req.id}
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded-xl text-xs transition shadow-xs disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>{cancellingId === req.id ? 'Cancelling...' : 'Cancel Request'}</span>
+                        </button>
+                      )}
                     </>
                   )}
                   {req.status === 'APPROVED' && (

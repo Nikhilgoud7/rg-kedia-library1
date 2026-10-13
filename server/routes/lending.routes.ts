@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import {
   MAX_ACTIVE_BORROWS_STUDENT,
@@ -8,6 +9,17 @@ import {
 } from '../lib/lendingPolicy.js';
 
 const router = Router();
+
+// Per-requester rate limit for request-return: 20 per 15 minutes (TEACHER/LIBRARIAN)
+const requestReturnLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'anonymous',
+  statusCode: 429,
+  message: { error: 'Too many return requests. Please try again after 15 minutes.' },
+});
 
 // POST /api/lending/request-borrow - Student/Teacher requests to borrow a book
 router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -168,9 +180,21 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
 });
 
 // POST /api/lending/request-return/:lendingId - Teacher requests a student to return early
-router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LIBRARIAN'), requestReturnLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { message } = req.body;
+
+    // Validate message: must be string or absent, max 300 chars
+    if (message !== undefined && message !== null) {
+      if (typeof message !== 'string') {
+        res.status(400).json({ error: 'message must be a string.' });
+        return;
+      }
+      if (message.length > 300) {
+        res.status(400).json({ error: 'message must be 300 characters or fewer.' });
+        return;
+      }
+    }
 
     const lending = await prisma.lending.findUnique({
       where: { id: req.params.lendingId },
@@ -179,6 +203,27 @@ router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LI
 
     if (!lending || lending.status !== 'ISSUED') {
       res.status(404).json({ error: 'Active lending not found.' });
+      return;
+    }
+
+    // Reject self-request: requester cannot request return of their own loan
+    if (lending.userId === req.user!.id) {
+      res.status(400).json({ error: 'You cannot request return of your own loan.' });
+      return;
+    }
+
+    // Idempotency: if a PENDING RETURN_REQUEST already exists for this user+book, return 409
+    const existing = await prisma.bookRequest.findFirst({
+      where: {
+        userId: lending.userId,
+        bookId: lending.bookCopy.bookId,
+        type: 'RETURN_REQUEST',
+        status: 'PENDING',
+      },
+    });
+
+    if (existing) {
+      res.status(409).json({ error: 'A return request is already pending for this book.', requestId: existing.id });
       return;
     }
 
@@ -727,6 +772,12 @@ router.post('/cancel-request/:requestId', authenticate, async (req: AuthRequest,
       return;
     }
 
+    // Only BORROW requests can be cancelled by the borrower; RETURN_REQUESTs are resolved by returning the book
+    if (request.type !== 'BORROW') {
+      res.status(403).json({ error: 'Return requests are resolved by returning the book.' });
+      return;
+    }
+
     if (request.status !== 'PENDING') {
       res.status(400).json({ error: 'Only pending requests can be cancelled.' });
       return;
@@ -736,6 +787,7 @@ router.post('/cancel-request/:requestId', authenticate, async (req: AuthRequest,
       where: {
         id: requestId,
         userId: req.user!.id,
+        type: 'BORROW',
         status: 'PENDING',
       },
       data: {
@@ -1025,7 +1077,7 @@ router.put('/notifications/:id/read', authenticate, async (req: AuthRequest, res
     }
 
     if (notification.userId !== req.user!.id) {
-      res.status(403).json({ error: 'Access denied' });
+      res.status(404).json({ error: 'Notification not found' });
       return;
     }
 
