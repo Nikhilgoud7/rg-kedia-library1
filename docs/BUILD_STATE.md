@@ -50,4 +50,10 @@
 - None
 
 ## BLOCKED
-- None
+- **Stage 1b (Phase 3G-2: PostgreSQL) Prerequisite**:
+  - `DATABASE_URL` in the local `.env` file does not start with `postgresql://` (evaluated boolean `isPostgres: false`).
+  - Per `docs/AUTOPILOT.md` Section 1b: User action required. Please add your Neon PostgreSQL direct connection string to your local `.env` file:
+    ```env
+    DATABASE_URL="postgresql://<user>:<password>@<neon-host>/<dbname>?sslmode=require"
+    ```
+  - Execution is stopped awaiting user update of `.env`. Once updated, Phase 3G-2 (PostgreSQL migration, case-insensitive queries, concurrency tests, and advisory locks) will proceed immediately.
