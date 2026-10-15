@@ -48,7 +48,7 @@ router.get('/papers', authenticate, async (req: AuthRequest, res: Response): Pro
     if (branch) where.branch = branch;
     if (year) where.year = parseInt(year as string);
     if (semester) where.semester = parseInt(semester as string);
-    if (subject) where.subject = { contains: subject as string };
+    if (subject) where.subject = { contains: subject as string, mode: 'insensitive' };
     if (type) where.type = type;
 
     const papers = await prisma.examPaper.findMany({

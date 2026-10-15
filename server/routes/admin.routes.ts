@@ -86,9 +86,9 @@ router.get('/users', authenticate, authorize('LIBRARIAN'), async (req: AuthReque
     if (branch) where.branch = branch;
     if (search) {
       where.OR = [
-        { name: { contains: search as string } },
-        { email: { contains: search as string } },
-        { rollNumber: { contains: search as string } },
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+        { rollNumber: { contains: search as string, mode: 'insensitive' } },
       ];
     }
 

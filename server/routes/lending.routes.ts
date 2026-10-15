@@ -98,11 +98,22 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
 
     // Race-safe creation inside transaction
     const request = await prisma.$transaction(async (tx) => {
+      // PostgreSQL advisory transaction lock to serialize concurrent borrow requests for the same user and book
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`borrow:${req.user!.id}:${bookId}`}))`;
+
       // Portable row locking on user row for Postgres & SQLite concurrency protection
       await tx.user.update({
         where: { id: req.user!.id },
         data: { updatedAt: new Date() },
       });
+
+      // Check if user already has a pending request for this book inside transaction
+      const existingRequestTx = await tx.bookRequest.findFirst({
+        where: { userId: req.user!.id, bookId, status: 'PENDING', type: 'BORROW' },
+      });
+      if (existingRequestTx) {
+        throw { status: 400, error: 'You already have a pending request for this book.' };
+      }
 
       const created = await tx.bookRequest.create({
         data: {
@@ -279,6 +290,9 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
         throw { status: 404, error: 'Pending borrow request not found.' };
       }
 
+      // PostgreSQL advisory transaction lock on the book to serialize copy allocation across concurrent approvals
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${request.bookId}`}))`;
+
       // Conditional claim on request
       const claimedRequest = await tx.bookRequest.updateMany({
         where: { id: request.id, status: 'PENDING', type: 'BORROW' },
@@ -428,6 +442,9 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
     const now = new Date();
 
     const result = await prisma.$transaction(async (tx) => {
+      // PostgreSQL advisory transaction lock on the lending record
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lending:${req.params.lendingId}`}))`;
+
       const lending = await tx.lending.findUnique({
         where: { id: req.params.lendingId },
         include: { bookCopy: { include: { book: true } }, user: true },
@@ -571,6 +588,9 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
     newDueDate.setDate(newDueDate.getDate() + RENEWAL_DAYS);
 
     const result = await prisma.$transaction(async (tx) => {
+      // PostgreSQL advisory transaction lock on the lending record
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lending:${lendingId}`}))`;
+
       const updated = await tx.lending.updateMany({
         where: {
           id: lendingId,
@@ -825,9 +845,9 @@ router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: 
     }
     if (search) {
       where.OR = [
-        { user: { name: { contains: search as string } } },
-        { user: { rollNumber: { contains: search as string } } },
-        { bookCopy: { book: { title: { contains: search as string } } } },
+        { user: { name: { contains: search as string, mode: 'insensitive' } } },
+        { user: { rollNumber: { contains: search as string, mode: 'insensitive' } } },
+        { bookCopy: { book: { title: { contains: search as string, mode: 'insensitive' } } } },
       ];
     }
 

@@ -28,10 +28,10 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
       const trimmedSearch = search.trim().substring(0, 100);
       if (trimmedSearch.length > 0) {
         where.OR = [
-          { title: { contains: trimmedSearch } },
-          { author: { contains: trimmedSearch } },
-          { isbn: { contains: trimmedSearch } },
-          { segment: { contains: trimmedSearch } },
+          { title: { contains: trimmedSearch, mode: 'insensitive' } },
+          { author: { contains: trimmedSearch, mode: 'insensitive' } },
+          { isbn: { contains: trimmedSearch, mode: 'insensitive' } },
+          { segment: { contains: trimmedSearch, mode: 'insensitive' } },
         ];
       }
     }

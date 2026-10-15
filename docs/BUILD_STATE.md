@@ -9,34 +9,32 @@
 - **Phase 3A-3F**: Student Catalog, Borrowing, Requests, Notifications, and Settings
 - **Phase 4A-4F**: Teacher Module (Catalog, Borrowing, Return Requests, Profile, Settings, Notifications, Regression Hardening)
 - **Phase 3G-1**: Dependency Security Updates (`165bd42`) & Production Safety Hardening (`89d7eb0`)
-- **Phase 3G-1 Correction**: Strict TRUST_PROXY Non-Negative Integer Enforcement & Rate Limiter / Cookie Hardening (Stage 1a)
+- **Phase 3G-1 Correction**: Strict TRUST_PROXY Non-Negative Integer Enforcement (`457bcd6`)
+- **Phase 3G-2**: PostgreSQL Migration on Neon (`provider = "postgresql"`, directUrl, baseline migration, advisory locks, case-insensitive search, concurrency & consistency verified)
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 1 — finish Phase 3G (Demo Deployment)
-- **Current Sub-Phase**: 1b ("Phase 3G-2: PostgreSQL")
+- **Current Sub-Phase**: 1c ("Phase 3G-3: committed regression suite")
 - **Current Loop Step**: A (Audit)
 
-## Stage 1a Plan & Audit
-### Audit Findings
-- `TRUST_PROXY` in `server/config.ts` was not validated and accepted non-integer values (true, false, strings, subnets) in `server/index.ts`.
-- Sub-phase 1a requires strict validation: `TRUST_PROXY` must be a non-negative integer (`/^\d+$/`), rejecting any other value (`true`, `false`, `*`, `loopback`, `192.168.1.1`, `-1`, `abc`) with a clear startup error and `process.exit(1)`.
-- No database migration needed.
-
-### Exact Change List
-1. `server/config.ts`:
-   - Validate `process.env.TRUST_PROXY`: if set and non-empty, test against `/^\d+$/`.
-   - If invalid: `console.error('FATAL: TRUST_PROXY environment variable must be a non-negative integer (e.g. 1). Received invalid value. Server cannot start safely.')` and `process.exit(1)`.
-   - Export `TRUST_PROXY: number | undefined`.
-2. `server/index.ts`:
-   - Simplify trust proxy configuration: if `TRUST_PROXY !== undefined`, `app.set('trust proxy', TRUST_PROXY)`.
-3. Tests (`verify-3g1-safety.js` updated):
-   - Reject invalid `TRUST_PROXY` values on startup: `true`, `false`, `*`, `subnet`, `-1`.
-   - Confirm secret never appears in stderr/stdout on any startup failure.
-   - Test rate limiter bucket behavior with `TRUST_PROXY` unset vs `TRUST_PROXY=1`.
-   - Test `Set-Cookie` with `NODE_ENV=production` has `HttpOnly`, `Secure`, and `SameSite=Strict`.
-4. Run full regression suite (all 7 suites).
+## Stage 1b PostgreSQL Summary
+- **Database Engine**: Neon PostgreSQL (project: `shy-haze-95283527`, branch: `production`, AWS ap-southeast-1)
+- **Prisma**: Upgraded `prisma` and `@prisma/client` to latest stable 6.x release (`6.19.3`)
+- **Package Scripts**: Added `prisma:migrate` (`prisma migrate dev`) and `prisma:deploy` (`prisma migrate deploy`); updated `setup`
+- **Migrations**: Baseline migration `20261015101827_init` generated and applied
+- **Database Backup**: SQLite `prisma/dev.db` preserved untouched as backup
+- **Insensitive Queries**: `mode: 'insensitive'` added to `contains` search filters across `book`, `user`, `admin`, `exam`, `lending` routes; verified "MATH" vs "math" returns identical IDs
+- **PostgreSQL Advisory Locks**: Integrated `SELECT pg_advisory_xact_lock(hashtext(...))` inside transactions for `request-borrow`, `approve`, `renew`, `return`
+- **Concurrency & Consistency Tests**: 34/34 checks passed (`verify-stage1b-postgres.js`), covering:
+  - 10 parallel borrow requests (1 succeeds, 9 return 400)
+  - 2 parallel approves for one request (1 succeeds, 1 conflict)
+  - 2 parallel approves for the last copy of a book (1 succeeds, 1 returns 400 "No copies available to issue.")
+  - 2 parallel renews (1 succeeds, 1 returns 400)
+  - 2 parallel returns (1 succeeds, 1 conflict)
+  - Full consistency audit: 0 inconsistent ISSUED lendings, 0 orphan ISSUED copies, 0 duplicate active copies per user, 0 duplicate PENDING requests per user+book
 
 ## Active Test Commands
+- **Stage 1b PostgreSQL Concurrency & Consistency**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-stage1b-postgres.js"`
 - **Phase 3G-1 Safety**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-3g1-safety.js"`
 - **Phase 3E Runtime**: `npx tsx "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-phase3e.ts"`
 - **Phase 3E Corrective**: `npx tsx "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-3e-corrective.ts"`
@@ -49,21 +47,5 @@
 ## Known Issues
 - None
 
-## 3-Year Free-Tier Requirements Added
-1. **Stage 1d (Phase 3G-4)**:
-   - Notification bell polling: poll lightweight unread-count endpoint every 60s, pause polling when tab is hidden, fetch full list only on bell/page open.
-   - Notification retention: permanently delete READ notifications older than 90 days (including dismissed ones), never touch unread ones, include tests.
-   - DEPLOY.md: add "Running for 3 years" section (expected DB size 40-160 MB, free-tier limits, upgrade path to Render Starter $7/mo + paid DB).
-2. **Phase 8 (Cover Images)**:
-   - File storage abstraction via storage adapter (Supabase Storage / S3-compatible support); default driver must not write to local disk in production.
-3. **Phase 9/10 (Backups & Analytics)**:
-   - Weekly automated backup: GitHub Actions workflow + `npm run backup` script (pg_dump/export to private artifact), restore documentation, secret for DB URL (user supplied).
-
 ## BLOCKED
-- **Stage 1b (Phase 3G-2: PostgreSQL) Prerequisite**:
-  - `DATABASE_URL` in the local `.env` file does not start with `postgresql://` (evaluated boolean `isPostgres: false`).
-  - Per `docs/AUTOPILOT.md` Section 1b: User action required. Please add your Neon PostgreSQL direct connection string to your local `.env` file:
-    ```env
-    DATABASE_URL="postgresql://<user>:<password>@<neon-host>/<dbname>?sslmode=require"
-    ```
-  - Execution is stopped awaiting user update of `.env`. Once updated, Phase 3G-2 (PostgreSQL migration, case-insensitive queries, concurrency tests, and advisory locks) will proceed immediately.
+- None
