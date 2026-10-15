@@ -49,6 +49,16 @@
 ## Known Issues
 - None
 
+## 3-Year Free-Tier Requirements Added
+1. **Stage 1d (Phase 3G-4)**:
+   - Notification bell polling: poll lightweight unread-count endpoint every 60s, pause polling when tab is hidden, fetch full list only on bell/page open.
+   - Notification retention: permanently delete READ notifications older than 90 days (including dismissed ones), never touch unread ones, include tests.
+   - DEPLOY.md: add "Running for 3 years" section (expected DB size 40-160 MB, free-tier limits, upgrade path to Render Starter $7/mo + paid DB).
+2. **Phase 8 (Cover Images)**:
+   - File storage abstraction via storage adapter (Supabase Storage / S3-compatible support); default driver must not write to local disk in production.
+3. **Phase 9/10 (Backups & Analytics)**:
+   - Weekly automated backup: GitHub Actions workflow + `npm run backup` script (pg_dump/export to private artifact), restore documentation, secret for DB URL (user supplied).
+
 ## BLOCKED
 - **Stage 1b (Phase 3G-2: PostgreSQL) Prerequisite**:
   - `DATABASE_URL` in the local `.env` file does not start with `postgresql://` (evaluated boolean `isPostgres: false`).
