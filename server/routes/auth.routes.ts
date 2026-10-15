@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { rateLimit } from 'express-rate-limit';
 import prisma, { authenticate, AuthRequest } from '../middleware/auth.js';
+import { JWT_SECRET, JWT_EXPIRES_IN, IS_PRODUCTION } from '../config.js';
 
 const router = Router();
 
@@ -97,14 +98,12 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
     }
 
     // Generate JWT
-    const secret = process.env.JWT_SECRET || 'default-secret';
-    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const token = jwt.sign({ id: user.id, v: user.tokenVersion }, secret, { expiresIn: expiresIn as any });
+    const token = jwt.sign({ id: user.id, v: user.tokenVersion }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
 
     // Set HttpOnly cookie
     res.cookie('rg_kedia_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: IS_PRODUCTION,
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
@@ -124,7 +123,7 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
 router.post('/logout', async (req: AuthRequest, res: Response): Promise<void> => {
   const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: IS_PRODUCTION,
     sameSite: 'strict' as const,
   };
 
@@ -137,8 +136,7 @@ router.post('/logout', async (req: AuthRequest, res: Response): Promise<void> =>
 
     if (token) {
       try {
-        const secret = process.env.JWT_SECRET || 'default-secret';
-        const decoded = jwt.verify(token, secret) as { id: string; v?: number };
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string; v?: number };
 
         if (decoded.id) {
           // Increment tokenVersion to invalidate all existing JWTs for this user
@@ -302,7 +300,7 @@ router.put('/change-password', authenticate, changePasswordLimiter, async (req: 
     // Clear the auth cookie — user must log in again with the new password
     res.clearCookie('rg_kedia_token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: IS_PRODUCTION,
       sameSite: 'strict',
     });
 

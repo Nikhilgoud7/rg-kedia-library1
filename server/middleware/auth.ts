@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { JWT_SECRET } from '../config.js';
 
 const prisma = new PrismaClient();
 
@@ -30,8 +31,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
-    const secret = process.env.JWT_SECRET || 'default-secret';
-    const decoded = jwt.verify(token, secret) as { id: string; v?: number };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; v?: number };
 
     // Require the v (tokenVersion) claim — reject legacy tokens without it
     if (decoded.v === undefined || decoded.v === null) {
