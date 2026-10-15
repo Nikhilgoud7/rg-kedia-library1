@@ -25,4 +25,16 @@ export const IS_PRODUCTION: boolean = NODE_ENV === 'production';
 export const CLIENT_URL: string = process.env.CLIENT_URL || 'http://localhost:5173';
 export const UPLOAD_DIR: string = process.env.UPLOAD_DIR || './uploads';
 export const MAX_FILE_SIZE: number = parseInt(process.env.MAX_FILE_SIZE || '10485760', 10);
-export const TRUST_PROXY: string | undefined = process.env.TRUST_PROXY;
+let parsedTrustProxy: number | undefined = undefined;
+if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== '') {
+  const trimmed = process.env.TRUST_PROXY.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    console.error(
+      'FATAL: TRUST_PROXY environment variable must be a non-negative integer (e.g. 1). Received invalid value. Server cannot start safely.'
+    );
+    process.exit(1);
+  }
+  parsedTrustProxy = parseInt(trimmed, 10);
+}
+
+export const TRUST_PROXY: number | undefined = parsedTrustProxy;

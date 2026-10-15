@@ -9,11 +9,32 @@
 - **Phase 3A-3F**: Student Catalog, Borrowing, Requests, Notifications, and Settings
 - **Phase 4A-4F**: Teacher Module (Catalog, Borrowing, Return Requests, Profile, Settings, Notifications, Regression Hardening)
 - **Phase 3G-1**: Dependency Security Updates (`165bd42`) & Production Safety Hardening (`89d7eb0`)
+- **Phase 3G-1 Correction**: Strict TRUST_PROXY Non-Negative Integer Enforcement & Rate Limiter / Cookie Hardening (Stage 1a)
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 1 — finish Phase 3G (Demo Deployment)
-- **Current Sub-Phase**: 1a ("Phase 3G-1 correction")
+- **Current Sub-Phase**: 1b ("Phase 3G-2: PostgreSQL")
 - **Current Loop Step**: A (Audit)
+
+## Stage 1a Plan & Audit
+### Audit Findings
+- `TRUST_PROXY` in `server/config.ts` was not validated and accepted non-integer values (true, false, strings, subnets) in `server/index.ts`.
+- Sub-phase 1a requires strict validation: `TRUST_PROXY` must be a non-negative integer (`/^\d+$/`), rejecting any other value (`true`, `false`, `*`, `loopback`, `192.168.1.1`, `-1`, `abc`) with a clear startup error and `process.exit(1)`.
+- No database migration needed.
+
+### Exact Change List
+1. `server/config.ts`:
+   - Validate `process.env.TRUST_PROXY`: if set and non-empty, test against `/^\d+$/`.
+   - If invalid: `console.error('FATAL: TRUST_PROXY environment variable must be a non-negative integer (e.g. 1). Received invalid value. Server cannot start safely.')` and `process.exit(1)`.
+   - Export `TRUST_PROXY: number | undefined`.
+2. `server/index.ts`:
+   - Simplify trust proxy configuration: if `TRUST_PROXY !== undefined`, `app.set('trust proxy', TRUST_PROXY)`.
+3. Tests (`verify-3g1-safety.js` updated):
+   - Reject invalid `TRUST_PROXY` values on startup: `true`, `false`, `*`, `subnet`, `-1`.
+   - Confirm secret never appears in stderr/stdout on any startup failure.
+   - Test rate limiter bucket behavior with `TRUST_PROXY` unset vs `TRUST_PROXY=1`.
+   - Test `Set-Cookie` with `NODE_ENV=production` has `HttpOnly`, `Secure`, and `SameSite=Strict`.
+4. Run full regression suite (all 7 suites).
 
 ## Active Test Commands
 - **Phase 3G-1 Safety**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-3g1-safety.js"`

@@ -20,17 +20,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Trust Proxy configuration (for reverse proxies e.g. Render, Railway, Nginx)
-if (TRUST_PROXY !== undefined && TRUST_PROXY !== '') {
-  const hopCount = parseInt(TRUST_PROXY, 10);
-  if (!isNaN(hopCount)) {
-    app.set('trust proxy', hopCount);
-  } else if (TRUST_PROXY.toLowerCase() === 'true') {
-    app.set('trust proxy', true);
-  } else if (TRUST_PROXY.toLowerCase() === 'false') {
-    app.set('trust proxy', false);
-  } else {
-    app.set('trust proxy', TRUST_PROXY);
-  }
+if (TRUST_PROXY !== undefined) {
+  app.set('trust proxy', TRUST_PROXY);
 }
 
 // Middleware
