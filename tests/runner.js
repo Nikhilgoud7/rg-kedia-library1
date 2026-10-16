@@ -6,6 +6,7 @@ import { runAuthorizationTests } from './suites/authorization.test.js';
 import { runLendingTests } from './suites/lending.test.js';
 import { runConcurrencyTests } from './suites/concurrency.test.js';
 import { runNotificationTests } from './suites/notification.test.js';
+import { runDemoAndRetentionTests } from './suites/demoAndRetention.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -13,6 +14,7 @@ const SUITES = {
   lending: { name: 'Lending Policy & Lifecycle Suite (Step 5)', fn: runLendingTests },
   concurrency: { name: 'PostgreSQL Concurrency & Advisory Lock Suite (Step 6)', fn: runConcurrencyTests },
   notification: { name: 'Notification Regression Suite (Step 7)', fn: runNotificationTests },
+  demo: { name: 'Demo Safeguards & Retention Suite (Phase 3G-4C)', fn: runDemoAndRetentionTests },
 };
 
 async function checkHealth(url) {

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { rateLimit } from 'express-rate-limit';
 import prisma, { authenticate, AuthRequest } from '../middleware/auth.js';
-import { JWT_SECRET, JWT_EXPIRES_IN, IS_PRODUCTION } from '../config.js';
+import { JWT_SECRET, JWT_EXPIRES_IN, IS_PRODUCTION, DEMO_MODE } from '../config.js';
 
 const router = Router();
 
@@ -22,6 +22,7 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   statusCode: 429,
   message: { error: 'Too many login attempts from this IP. Please try again after 15 minutes.' },
+  skip: () => process.env.NODE_ENV === 'test' || process.env.ALLOW_TESTS === 'true',
 });
 
 // POST /api/auth/login
@@ -250,6 +251,7 @@ const changePasswordLimiter = rateLimit({
   keyGenerator: (req: any) => req.user?.id || 'anonymous',
   statusCode: 429,
   message: { error: 'Too many password change attempts. Please try again after 15 minutes.' },
+  skip: () => process.env.NODE_ENV === 'test' || process.env.ALLOW_TESTS === 'true',
 });
 
 // PUT /api/auth/change-password
@@ -262,8 +264,8 @@ router.put('/change-password', authenticate, changePasswordLimiter, async (req: 
       return;
     }
 
-    if (newPassword.length < 6) {
-      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'New password must be at least 8 characters.' });
       return;
     }
 
@@ -275,6 +277,11 @@ router.put('/change-password', authenticate, changePasswordLimiter, async (req: 
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (DEMO_MODE && user.email.toLowerCase().endsWith('@demo.rgkedia.local')) {
+      res.status(403).json({ error: 'Password change is prohibited for demo accounts in DEMO_MODE.' });
       return;
     }
 

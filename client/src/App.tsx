@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
 
-// Pages
+import DemoBanner from './components/common/DemoBanner';
 import LoginPage from './pages/LoginPage';
 
 // Librarian Pages
@@ -115,6 +115,7 @@ export const App: React.FC = () => {
             },
           }}
         />
+        <DemoBanner />
 
         <Routes>
           {/* Public Routes */}

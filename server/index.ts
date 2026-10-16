@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
-import { PORT, CLIENT_URL, TRUST_PROXY, IS_PRODUCTION } from './config.js';
+import { PORT, CLIENT_URL, TRUST_PROXY, IS_PRODUCTION, DEMO_MODE } from './config.js';
 import authRoutes from './routes/auth.routes.js';
 import bookRoutes from './routes/book.routes.js';
 import lendingRoutes from './routes/lending.routes.js';
@@ -83,6 +83,14 @@ app.get('/api/health', async (_req, res) => {
       status: 'degraded',
     });
   }
+});
+
+// Public application configuration endpoint (safe client metadata, no secrets)
+app.get('/api/config', (_req, res) => {
+  res.json({
+    demoMode: DEMO_MODE,
+    name: 'R.G. Kedia College Library System',
+  });
 });
 
 // API 404 fallback: ensure non-existent API routes never fall through to SPA HTML

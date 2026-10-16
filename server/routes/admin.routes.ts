@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { DEMO_MODE } from '../config.js';
 
 const router = Router();
 
@@ -121,6 +122,11 @@ router.post('/users', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
       return;
     }
 
+    if (password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters.' });
+      return;
+    }
+
     const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (existing) {
       res.status(409).json({ error: 'Email already exists.' });
@@ -173,10 +179,21 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
 
     const existingUser = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: { active: true },
     });
 
-    const shouldDeactivate = active === false && existingUser?.active === true;
+    if (!existingUser) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (DEMO_MODE && existingUser.email.toLowerCase().endsWith('@demo.rgkedia.local')) {
+      if (active === false || (role && role !== existingUser.role) || (email && email.toLowerCase() !== existingUser.email)) {
+        res.status(403).json({ error: 'Modifying critical settings of demo accounts is prohibited in DEMO_MODE.' });
+        return;
+      }
+    }
+
+    const shouldDeactivate = active === false && existingUser.active === true;
 
     const user = await prisma.user.update({
       where: { id: req.params.id },
@@ -213,8 +230,19 @@ router.put('/users/:id/reset-password', authenticate, authorize('LIBRARIAN'), as
   try {
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters.' });
+      return;
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (DEMO_MODE && targetUser.email.toLowerCase().endsWith('@demo.rgkedia.local')) {
+      res.status(403).json({ error: 'Password reset is prohibited for demo accounts in DEMO_MODE.' });
       return;
     }
 
@@ -232,6 +260,33 @@ router.put('/users/:id/reset-password', authenticate, authorize('LIBRARIAN'), as
     res.json({ message: 'Password reset successfully.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// DELETE /api/admin/users/:id - Delete user (Librarian only)
+router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    if (DEMO_MODE && targetUser.email.toLowerCase().endsWith('@demo.rgkedia.local')) {
+      res.status(403).json({ error: 'Deleting demo accounts is prohibited in DEMO_MODE.' });
+      return;
+    }
+
+    if (targetUser.id === req.user!.id) {
+      res.status(400).json({ error: 'Cannot delete your own account.' });
+      return;
+    }
+
+    await prisma.user.delete({ where: { id: req.params.id } });
+    res.json({ message: 'User deleted successfully.' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Server error deleting user.' });
   }
 });
 

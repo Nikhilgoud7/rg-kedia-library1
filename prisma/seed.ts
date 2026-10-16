@@ -16,64 +16,81 @@ async function main() {
   await prisma.book.deleteMany();
   await prisma.user.deleteMany();
 
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash('password123', salt);
-  const adminPasswordHash = await bcrypt.hash('admin123', salt);
+  const isProduction = process.env.NODE_ENV === 'production';
+  const forceSeed = process.env.FORCE_SEED === 'true';
 
-  // 1. Create Users
+  if (isProduction && !forceSeed) {
+    console.error('FATAL: Database seeding is blocked in production unless FORCE_SEED=true is explicitly set.');
+    process.exit(1);
+  }
+
+  const rawSeedPassword = process.env.SEED_PASSWORD;
+  if (isProduction && (!rawSeedPassword || rawSeedPassword.length < 12)) {
+    console.error('FATAL: SEED_PASSWORD environment variable must be at least 12 characters in production.');
+    process.exit(1);
+  }
+
+  const seedPassword = rawSeedPassword || 'DemoPass@1234';
+  const adminPassword = process.env.ADMIN_PASSWORD || seedPassword;
+
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(seedPassword, salt);
+  const adminPasswordHash = await bcrypt.hash(adminPassword, salt);
+
+  // 1. Create Synthetic Demo Personas
   // Librarian
   const librarian = await prisma.user.create({
     data: {
-      name: 'Dr. V. Ramanatha Sharma',
-      email: 'librarian@rgkedia.edu.in',
+      name: 'Demo Librarian',
+      email: 'demo.librarian@demo.rgkedia.local',
       password: adminPasswordHash,
       role: 'LIBRARIAN',
-      phone: '9849012345',
+      phone: '0000000000',
     },
   });
 
   // Teachers
   const teacher1 = await prisma.user.create({
     data: {
-      name: 'Prof. K. Sunitha Rao',
-      email: 'sunitha.commerce@rgkedia.edu.in',
+      name: 'Demo Teacher 1',
+      email: 'demo.teacher1@demo.rgkedia.local',
       password: passwordHash,
       role: 'TEACHER',
       program: 'BCOM',
       branch: 'General',
-      phone: '9849023456',
+      phone: '0000000001',
     },
   });
 
   const teacher2 = await prisma.user.create({
     data: {
-      name: 'Dr. M. A. Quadri',
-      email: 'quadri.cs@rgkedia.edu.in',
+      name: 'Demo Teacher 2',
+      email: 'demo.teacher2@demo.rgkedia.local',
       password: passwordHash,
       role: 'TEACHER',
       program: 'BSC',
       branch: 'Computer Science & Data',
-      phone: '9849034567',
+      phone: '0000000002',
     },
   });
 
   const teacher3 = await prisma.user.create({
     data: {
-      name: 'Mrs. P. Shailaja',
-      email: 'shailaja.bba@rgkedia.edu.in',
+      name: 'Demo Teacher 3',
+      email: 'demo.teacher3@demo.rgkedia.local',
       password: passwordHash,
       role: 'TEACHER',
       program: 'BBA',
       branch: 'General Business Administration',
-      phone: '9849045678',
+      phone: '0000000003',
     },
   });
 
   // Students
   const student1 = await prisma.user.create({
     data: {
-      name: 'Rahul Sharma',
-      email: 'rahul.s@student.rgkedia.edu.in',
+      name: 'Demo Student 1',
+      email: 'demo.student1@demo.rgkedia.local',
       rollNumber: '1052-24-401-001',
       password: passwordHash,
       role: 'STUDENT',
@@ -82,14 +99,14 @@ async function main() {
       year: 2,
       semester: 3,
       secondLanguage: 'HINDI',
-      phone: '9849056789',
+      phone: '0000000011',
     },
   });
 
   const student2 = await prisma.user.create({
     data: {
-      name: 'P. Sai Krishna',
-      email: 'sai.krishna@student.rgkedia.edu.in',
+      name: 'Demo Student 2',
+      email: 'demo.student2@demo.rgkedia.local',
       rollNumber: '1052-24-401-045',
       password: passwordHash,
       role: 'STUDENT',
@@ -98,14 +115,14 @@ async function main() {
       year: 3,
       semester: 5,
       secondLanguage: 'TELUGU',
-      phone: '9849067890',
+      phone: '0000000012',
     },
   });
 
   const student3 = await prisma.user.create({
     data: {
-      name: 'Mohammed Faisal',
-      email: 'faisal.m@student.rgkedia.edu.in',
+      name: 'Demo Student 3',
+      email: 'demo.student3@demo.rgkedia.local',
       rollNumber: '1052-24-402-012',
       password: passwordHash,
       role: 'STUDENT',
@@ -114,14 +131,14 @@ async function main() {
       year: 1,
       semester: 1,
       secondLanguage: 'ARABIC',
-      phone: '9849078901',
+      phone: '0000000013',
     },
   });
 
   const student4 = await prisma.user.create({
     data: {
-      name: 'Ananya Deshmukh',
-      email: 'ananya.d@student.rgkedia.edu.in',
+      name: 'Demo Student 4',
+      email: 'demo.student4@demo.rgkedia.local',
       rollNumber: '1052-24-403-008',
       password: passwordHash,
       role: 'STUDENT',
@@ -130,14 +147,14 @@ async function main() {
       year: 2,
       semester: 4,
       secondLanguage: 'SANSKRIT',
-      phone: '9849089012',
+      phone: '0000000014',
     },
   });
 
   const student5 = await prisma.user.create({
     data: {
-      name: 'V. Divya Teja',
-      email: 'divya.teja@student.rgkedia.edu.in',
+      name: 'Demo Student 5',
+      email: 'demo.student5@demo.rgkedia.local',
       rollNumber: '1052-24-401-099',
       password: passwordHash,
       role: 'STUDENT',
@@ -146,7 +163,7 @@ async function main() {
       year: 3,
       semester: 6,
       secondLanguage: 'TELUGU',
-      phone: '9849090123',
+      phone: '0000000015',
     },
   });
 
@@ -663,23 +680,22 @@ async function main() {
 
   console.log('Database seeding finished successfully! 🎉');
   console.log(`
-  Default Logins:
+  Synthetic Demo Personas:
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   👤 LIBRARIAN:
-     Email: librarian@rgkedia.edu.in
-     Pass : admin123
+     Email: demo.librarian@demo.rgkedia.local
 
-  👨‍🏫 TEACHER:
-     Email: sunitha.commerce@rgkedia.edu.in
-     Pass : password123
+  👨‍🏫 TEACHERS:
+     Email: demo.teacher1@demo.rgkedia.local (Commerce)
+     Email: demo.teacher2@demo.rgkedia.local (CS & Data)
+     Email: demo.teacher3@demo.rgkedia.local (BBA)
 
   🎓 STUDENTS:
-     Roll No: 1052-24-401-001 (or email: rahul.s@student.rgkedia.edu.in)
-     Pass   : password123
-
-     Roll No: 1052-24-401-045 (Sai Krishna - B.Com Analytics)
-     Roll No: 1052-24-402-012 (Mohammed Faisal - BBA)
-     Roll No: 1052-24-403-008 (Ananya - B.Sc CS & Data)
+     Roll No: 1052-24-401-001 (demo.student1@demo.rgkedia.local)
+     Roll No: 1052-24-401-045 (demo.student2@demo.rgkedia.local)
+     Roll No: 1052-24-402-012 (demo.student3@demo.rgkedia.local)
+     Roll No: 1052-24-403-008 (demo.student4@demo.rgkedia.local)
+     Roll No: 1052-24-401-099 (demo.student5@demo.rgkedia.local)
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   `);
 }

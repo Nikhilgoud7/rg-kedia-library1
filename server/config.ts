@@ -38,3 +38,4 @@ if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== '') {
 }
 
 export const TRUST_PROXY: number | undefined = parsedTrustProxy;
+export const DEMO_MODE: boolean = process.env.DEMO_MODE === 'true';

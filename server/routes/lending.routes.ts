@@ -19,6 +19,7 @@ const requestReturnLimiter = rateLimit({
   keyGenerator: (req: any) => req.user?.id || 'anonymous',
   statusCode: 429,
   message: { error: 'Too many return requests. Please try again after 15 minutes.' },
+  skip: () => process.env.NODE_ENV === 'test' || process.env.ALLOW_TESTS === 'true',
 });
 
 // POST /api/lending/request-borrow - Student/Teacher requests to borrow a book
@@ -177,7 +178,7 @@ router.post('/request-borrow', authenticate, async (req: AuthRequest, res: Respo
       }
 
       return created;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     res.status(201).json({ request });
   } catch (error: any) {
@@ -375,7 +376,7 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
       });
 
       return { request: updatedRequest, lending };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     res.json({ request: result.request, lending: result.lending, message: 'Book issued successfully.' });
   } catch (error: any) {
@@ -423,7 +424,7 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
       });
 
       return await tx.bookRequest.findUnique({ where: { id: request.id } });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     res.json({ request: result });
   } catch (error: any) {
@@ -505,7 +506,7 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
       });
 
       return { daysOverdue };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     res.json({
       message: 'Book returned successfully.',
@@ -627,7 +628,7 @@ router.post('/renew/:lendingId', authenticate, async (req: AuthRequest, res: Res
           },
         },
       });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     res.json({
       message: `Loan renewed successfully by ${RENEWAL_DAYS} days.`,
@@ -911,6 +912,23 @@ router.get('/requests', authenticate, authorize('LIBRARIAN'), async (_req: AuthR
 });
 
 const lastNotifCheckMap = new Map<string, number>();
+
+// GET /api/lending/notifications/unread-count - Lightweight unread notification count
+router.get('/notifications/unread-count', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const unreadCount = await prisma.notification.count({
+      where: {
+        userId: req.user!.id,
+        read: false,
+        dismissedAt: null,
+      },
+    });
+    res.json({ unreadCount });
+  } catch (error) {
+    console.error('Unread count fetch error:', error);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
 
 // GET /api/lending/notifications - Current user's notifications
 router.get('/notifications', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {

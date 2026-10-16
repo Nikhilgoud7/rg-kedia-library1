@@ -12,22 +12,73 @@ export const NotificationBell: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const fetchNotifications = async () => {
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await api.get('/lending/notifications/unread-count');
+      if (typeof res.data?.unreadCount === 'number') {
+        setUnreadCount(res.data.unreadCount);
+      }
+    } catch (err) {
+      // Graceful error handling: log and preserve existing UI state
+      console.warn('Failed to fetch unread notification count', err);
+    }
+  };
+
+  const fetchFullNotifications = async () => {
     try {
       const res = await api.get('/lending/notifications');
       const list: Notification[] = res.data.notifications || [];
       setNotifications(list);
       setUnreadCount(typeof res.data.unreadCount === 'number' ? res.data.unreadCount : list.filter((n) => !n.read).length);
     } catch (err) {
-      console.error('Failed to fetch notifications', err);
+      console.error('Failed to fetch notifications list', err);
     }
   };
 
+  // Poll lightweight unread count every 60s, pausing when browser tab is hidden
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000); // 30s poll
-    return () => clearInterval(interval);
+    let intervalId: any = null;
+
+    const startPolling = () => {
+      if (!intervalId) {
+        intervalId = setInterval(fetchUnreadCount, 60000); // 60s free-tier friendly polling
+      }
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    // Initial count fetch
+    fetchUnreadCount();
+    startPolling();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Fetch full notifications list only when notification panel is opened
+  useEffect(() => {
+    if (isOpen) {
+      fetchFullNotifications();
+    }
+  }, [isOpen]);
 
   const markAsRead = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();

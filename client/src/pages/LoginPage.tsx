@@ -127,7 +127,7 @@ export const LoginPage: React.FC = () => {
                   onClick={() => {
                     setActiveTab('STUDENT');
                     setIdentifier('1052-24-401-001');
-                    setPassword('password123');
+                    setPassword('DemoPass@1234');
                   }}
                   className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                     activeTab === 'STUDENT'
@@ -142,8 +142,8 @@ export const LoginPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setActiveTab('FACULTY');
-                    setIdentifier('librarian@rgkedia.edu.in');
-                    setPassword('admin123');
+                    setIdentifier('demo.librarian@demo.rgkedia.local');
+                    setPassword('DemoPass@1234');
                   }}
                   className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                     activeTab === 'FACULTY'
@@ -210,37 +210,37 @@ export const LoginPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('librarian@rgkedia.edu.in', 'admin123', 'FACULTY')}
+                    onClick={() => handleDemoFill('demo.librarian@demo.rgkedia.local', 'DemoPass@1234', 'FACULTY')}
                     className="p-2 text-left rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 transition"
                   >
-                    <div className="text-[11px] font-bold">👤 Librarian Admin</div>
-                    <div className="text-[10px] text-amber-700 truncate">librarian@rgkedia.edu.in</div>
+                    <div className="text-[11px] font-bold">👤 Demo Librarian</div>
+                    <div className="text-[10px] text-amber-700 truncate">demo.librarian@demo.rgkedia.local</div>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('sunitha.commerce@rgkedia.edu.in', 'password123', 'FACULTY')}
+                    onClick={() => handleDemoFill('demo.teacher1@demo.rgkedia.local', 'DemoPass@1234', 'FACULTY')}
                     className="p-2 text-left rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 transition"
                   >
-                    <div className="text-[11px] font-bold">👨‍🏫 Faculty (Commerce)</div>
-                    <div className="text-[10px] text-blue-700 truncate">Prof. K. Sunitha</div>
+                    <div className="text-[11px] font-bold">👨‍🏫 Demo Teacher 1</div>
+                    <div className="text-[10px] text-blue-700 truncate">demo.teacher1@demo.rgkedia.local</div>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('1052-24-401-001', 'password123', 'STUDENT')}
+                    onClick={() => handleDemoFill('1052-24-401-001', 'DemoPass@1234', 'STUDENT')}
                     className="p-2 text-left rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 transition"
                   >
-                    <div className="text-[11px] font-bold">🎓 Student (B.Com Comp)</div>
+                    <div className="text-[11px] font-bold">🎓 Demo Student 1</div>
                     <div className="text-[10px] text-emerald-700">Roll: 1052-24-401-001</div>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('1052-24-403-008', 'password123', 'STUDENT')}
+                    onClick={() => handleDemoFill('1052-24-403-008', 'DemoPass@1234', 'STUDENT')}
                     className="p-2 text-left rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 transition"
                   >
-                    <div className="text-[11px] font-bold">🎓 Student (B.Sc Data)</div>
+                    <div className="text-[11px] font-bold">🎓 Demo Student 4</div>
                     <div className="text-[10px] text-purple-700">Roll: 1052-24-403-008</div>
                   </button>
                 </div>
