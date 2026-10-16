@@ -10,12 +10,13 @@
 - **Phase 4A-4F**: Teacher Module (Catalog, Borrowing, Return Requests, Profile, Settings, Notifications, Regression Hardening)
 - **Phase 3G-1**: Dependency Security Updates (`165bd42`) & Production Safety Hardening (`89d7eb0`)
 - **Phase 3G-1 Correction**: Strict TRUST_PROXY Non-Negative Integer Enforcement (`457bcd6`)
-- **Phase 3G-2**: PostgreSQL Migration on Neon (`provider = "postgresql"`, directUrl, baseline migration, advisory locks, case-insensitive search, concurrency & consistency verified)
+- **Phase 3G-2**: PostgreSQL Migration on Neon (`provider = "postgresql"`, directUrl, baseline migration, advisory locks, case-insensitive search, concurrency & consistency verified, `68c7537`)
+- **Phase 3G-3**: Committed Automated Regression Suite (`c1d116f`) — 5 permanent suites under `tests/`, 124 verified assertions, test safety guards (`ALLOW_TESTS=true`, `NODE_ENV=production` blocker), synthetic isolation & cascade cleanup, PostgreSQL concurrency & advisory lock tests, independent read-only audit approved (VERDICT: APPROVED).
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 1 — finish Phase 3G (Demo Deployment)
-- **Current Sub-Phase**: 1c ("Phase 3G-3: committed regression suite")
-- **Current Loop Step**: A (Audit)
+- **Current Sub-Phase**: 1d ("Phase 3G-4: demo deployment")
+- **Current Loop Step**: A (Audit / Plan)
 
 ## Stage 1b PostgreSQL Summary
 - **Database Engine**: Neon PostgreSQL (project: `shy-haze-95283527`, branch: `production`, AWS ap-southeast-1)
@@ -33,16 +34,28 @@
   - 2 parallel returns (1 succeeds, 1 conflict)
   - Full consistency audit: 0 inconsistent ISSUED lendings, 0 orphan ISSUED copies, 0 duplicate active copies per user, 0 duplicate PENDING requests per user+book
 
+## Phase 3G-3 Regression Framework Summary
+- **Permanent Framework**: Built natively under `tests/` with zero heavyweight test runner dependencies.
+- **Test Suites (124 Assertions Total)**:
+  - `auth.test.js` (20 assertions): Login, password rejection, inactive accounts, JWT forgery, session revocation, tokenVersion.
+  - `authorization.test.js` (26 assertions): Role matrix (STUDENT, TEACHER, LIBRARIAN), administrative protection, profile tampering, borrower identity masking.
+  - `lending.test.js` (35 assertions): 10-book cap, 30-day loan period, 0 fine policy, 1 renewal, overdue/return request blocks, cancellation rules, return processing.
+  - `concurrency.test.js` (22 assertions): PostgreSQL advisory locks, 10 parallel borrow requests, 2 parallel approvals, last-copy races, 2 parallel renews, 2 parallel returns, 4 database-wide consistency queries.
+  - `notification.test.js` (21 assertions): Lazy due-soon/overdue alerts, read updates, mark-all-read, soft-dismissal audit preservation, hard delete of generic notices.
+- **Safety Controls**:
+  - Explicit authorization requirement (`ALLOW_TESTS=true` or `--allow-tests`).
+  - Strict production blocker (`NODE_ENV=production` immediately aborts).
+  - Synthetic data namespace (`reg_<hex4>_*@example.test`) with guaranteed cascade cleanup.
+  - Recursive response secret auditing (`findLeakedSecrets`).
+- **Audit Approval**: Phase 3G-3A independent read-only audit completed with verdict `APPROVED (PASS WITH MINOR OBSERVATIONS)`.
+
 ## Active Test Commands
-- **Stage 1b PostgreSQL Concurrency & Consistency**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-stage1b-postgres.js"`
-- **Phase 3G-1 Safety**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-3g1-safety.js"`
-- **Phase 3E Runtime**: `npx tsx "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-phase3e.ts"`
-- **Phase 3E Corrective**: `npx tsx "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-3e-corrective.ts"`
-- **Phase 3F Notifications**: `npx tsx "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-phase3f.ts"`
-- **Phase 4D Teacher Profile & Settings**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-phase4d.js"`
-- **Phase 4F Teacher Full Regression**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-phase4f-full.js"`
-- **Step 2 Server Auth Sweep**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-step2-sweep.js"`
-- **Step 5 Data Integrity Lifecycle**: `node "C:\Users\Nikhil\.gemini\antigravity\brain\292276b2-7a12-403f-93af-145c2c21918c\scratch\verify-step5-integrity.js"`
+- **Full Automated Regression Suite**: `npm test`
+- **Authentication Suite**: `npm run test:auth`
+- **Role Authorization Suite**: `npm run test:authorization`
+- **Lending Policy Suite**: `npm run test:lending`
+- **PostgreSQL Concurrency Suite**: `npm run test:concurrency`
+- **Notification Suite**: `npm run test:notification`
 
 ## Known Issues
 - None
