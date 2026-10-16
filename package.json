@@ -15,7 +15,13 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
-    "setup": "npm install && cd client && npm install && cd .. && npm run prisma:generate && npm run prisma:deploy && npm run prisma:seed"
+    "setup": "npm install && cd client && npm install && cd .. && npm run prisma:generate && npm run prisma:deploy && npm run prisma:seed",
+    "test": "node tests/runner.js --allow-tests",
+    "test:auth": "node tests/runner.js --allow-tests --suite=auth",
+    "test:authorization": "node tests/runner.js --allow-tests --suite=authorization",
+    "test:lending": "node tests/runner.js --allow-tests --suite=lending",
+    "test:concurrency": "node tests/runner.js --allow-tests --suite=concurrency",
+    "test:notification": "node tests/runner.js --allow-tests --suite=notification"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",
