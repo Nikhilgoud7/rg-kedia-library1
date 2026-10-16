@@ -37,6 +37,7 @@ model User {
   bookRequests       BookRequest[]
   examPapersUploaded ExamPaper[]
   notifications      Notification[]
+  auditLogs          AuditLog[]
 }
 
 // ─── Books ──────────────────────────────────────────────
@@ -161,4 +162,21 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// ─── Audit Log ──────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  action    String   // USER_CREATED | USER_UPDATED | USER_DEACTIVATED | USER_ACTIVATED | PASSWORD_RESET | USER_DELETED | BOOK_CREATED | BOOK_UPDATED | BOOK_DELETED | BOOK_COPY_UPDATED
+  targetId  String?
+  details   String?
+  timestamp DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([timestamp])
 }

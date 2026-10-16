@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
 
 const router = Router();
 
@@ -188,39 +189,57 @@ router.post('/', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, 
 
     const copies = parseInt(totalCopies) || 1;
 
-    const book = await prisma.book.create({
-      data: {
-        title,
-        author,
-        isbn: isbn || null,
-        publisher: publisher || null,
-        edition: edition || null,
-        publicationYear: publicationYear ? parseInt(publicationYear) : null,
-        category: category || 'TEXTBOOK',
-        segment,
-        description: description || null,
-        totalCopies: copies,
-        availableCopies: copies,
-        shelfLocation: shelfLocation || null,
-        // Create individual copies
-        copies: {
-          create: Array.from({ length: copies }, (_, i) => ({
-            copyNumber: i + 1,
-            condition: 'Good',
-            status: 'AVAILABLE',
-          })),
+    const book = await prisma.$transaction(async (tx) => {
+      const created = await tx.book.create({
+        data: {
+          title,
+          author,
+          isbn: isbn || null,
+          publisher: publisher || null,
+          edition: edition || null,
+          publicationYear: publicationYear ? parseInt(publicationYear) : null,
+          category: category || 'TEXTBOOK',
+          segment,
+          description: description || null,
+          totalCopies: copies,
+          availableCopies: copies,
+          shelfLocation: shelfLocation || null,
+          // Create individual copies
+          copies: {
+            create: Array.from({ length: copies }, (_, i) => ({
+              copyNumber: i + 1,
+              condition: 'Good',
+              status: 'AVAILABLE',
+            })),
+          },
+          // Map to programs/branches
+          bookPrograms: programs && programs.length > 0
+            ? {
+                create: programs.map((p: { program: string; branch?: string }) => ({
+                  program: p.program,
+                  branch: p.branch || null,
+                })),
+              }
+            : undefined,
         },
-        // Map to programs/branches
-        bookPrograms: programs && programs.length > 0
-          ? {
-              create: programs.map((p: { program: string; branch?: string }) => ({
-                program: p.program,
-                branch: p.branch || null,
-              })),
-            }
-          : undefined,
-      },
-      include: { copies: true, bookPrograms: true },
+        include: { copies: true, bookPrograms: true },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.BOOK_CREATED,
+        targetId: created.id,
+        details: {
+          title: created.title,
+          author: created.author,
+          isbn: created.isbn,
+          category: created.category,
+          totalCopies: copies,
+        },
+        tx,
+      });
+
+      return created;
     });
 
     res.status(201).json({ book });
@@ -235,21 +254,38 @@ router.put('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest
   try {
     const { title, author, isbn, publisher, edition, publicationYear, category, segment, description, shelfLocation } = req.body;
 
-    const book = await prisma.book.update({
-      where: { id: req.params.id },
-      data: {
-        ...(title && { title }),
-        ...(author && { author }),
-        isbn: isbn ?? undefined,
-        publisher: publisher ?? undefined,
-        edition: edition ?? undefined,
-        publicationYear: publicationYear ? parseInt(publicationYear) : undefined,
-        ...(category && { category }),
-        ...(segment && { segment }),
-        description: description ?? undefined,
-        shelfLocation: shelfLocation ?? undefined,
-      },
-      include: { copies: true, bookPrograms: true },
+    const book = await prisma.$transaction(async (tx) => {
+      const updated = await tx.book.update({
+        where: { id: req.params.id },
+        data: {
+          ...(title && { title }),
+          ...(author && { author }),
+          isbn: isbn ?? undefined,
+          publisher: publisher ?? undefined,
+          edition: edition ?? undefined,
+          publicationYear: publicationYear ? parseInt(publicationYear) : undefined,
+          ...(category && { category }),
+          ...(segment && { segment }),
+          description: description ?? undefined,
+          shelfLocation: shelfLocation ?? undefined,
+        },
+        include: { copies: true, bookPrograms: true },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.BOOK_UPDATED,
+        targetId: updated.id,
+        details: {
+          title: updated.title,
+          author: updated.author,
+          category: updated.category,
+          segment: updated.segment,
+        },
+        tx,
+      });
+
+      return updated;
     });
 
     res.json({ book });
@@ -262,6 +298,15 @@ router.put('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest
 // DELETE /api/books/:id - Delete book (Librarian only)
 router.delete('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const existingBook = await prisma.book.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!existingBook) {
+      res.status(404).json({ error: 'Book not found.' });
+      return;
+    }
+
     // Check if any copies are currently issued
     const issuedCopies = await prisma.bookCopy.count({
       where: { bookId: req.params.id, status: 'ISSUED' },
@@ -272,7 +317,22 @@ router.delete('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
       return;
     }
 
-    await prisma.book.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.book.delete({ where: { id: req.params.id } });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.BOOK_DELETED,
+        targetId: req.params.id,
+        details: {
+          title: existingBook.title,
+          author: existingBook.author,
+          isbn: existingBook.isbn,
+        },
+        tx,
+      });
+    });
+
     res.json({ message: 'Book deleted successfully.' });
   } catch (error) {
     console.error('Delete book error:', error);
@@ -342,6 +402,20 @@ router.put('/copies/:copyId', authenticate, authorize('LIBRARIAN'), async (req: 
           },
         });
       }
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.BOOK_COPY_UPDATED,
+        targetId: copy.id,
+        details: {
+          bookId: copy.bookId,
+          previousStatus: copy.status,
+          newStatus: status || copy.status,
+          condition: condition || copy.condition,
+          barcode: barcode === '' ? null : (barcode ?? copy.barcode),
+        },
+        tx,
+      });
 
       return updated;
     });

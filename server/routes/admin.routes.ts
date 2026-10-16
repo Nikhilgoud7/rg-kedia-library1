@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { DEMO_MODE } from '../config.js';
+import { logAdminAction, AUDIT_ACTIONS, AuditAction } from '../lib/auditLogger.js';
 
 const router = Router();
 
@@ -144,25 +145,43 @@ router.post('/users', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role,
-        rollNumber: rollNumber || null,
-        program: program || null,
-        branch: branch || null,
-        year: year ? parseInt(year) : null,
-        semester: semester ? parseInt(semester) : null,
-        secondLanguage: secondLanguage || null,
-        phone: phone || null,
-      },
-      select: {
-        id: true, name: true, email: true, role: true,
-        rollNumber: true, program: true, branch: true,
-        year: true, semester: true, phone: true, active: true,
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name,
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          role,
+          rollNumber: rollNumber || null,
+          program: program || null,
+          branch: branch || null,
+          year: year ? parseInt(year) : null,
+          semester: semester ? parseInt(semester) : null,
+          secondLanguage: secondLanguage || null,
+          phone: phone || null,
+        },
+        select: {
+          id: true, name: true, email: true, role: true,
+          rollNumber: true, program: true, branch: true,
+          year: true, semester: true, phone: true, active: true,
+        },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.USER_CREATED,
+        targetId: created.id,
+        details: {
+          name: created.name,
+          email: created.email,
+          role: created.role,
+          program: created.program,
+          branch: created.branch,
+        },
+        tx,
+      });
+
+      return created;
     });
 
     res.status(201).json({ user });
@@ -194,28 +213,54 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
     }
 
     const shouldDeactivate = active === false && existingUser.active === true;
+    const shouldActivate = active === true && existingUser.active === false;
 
-    const user = await prisma.user.update({
-      where: { id: req.params.id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email: email.toLowerCase() }),
-        ...(role && { role }),
-        rollNumber: rollNumber ?? undefined,
-        program: program ?? undefined,
-        branch: branch ?? undefined,
-        year: year !== undefined ? parseInt(year) : undefined,
-        semester: semester !== undefined ? parseInt(semester) : undefined,
-        secondLanguage: secondLanguage ?? undefined,
-        phone: phone ?? undefined,
-        active: active !== undefined ? active : undefined,
-        ...(shouldDeactivate && { tokenVersion: { increment: 1 } }),
-      },
-      select: {
-        id: true, name: true, email: true, role: true,
-        rollNumber: true, program: true, branch: true,
-        year: true, semester: true, phone: true, active: true,
-      },
+    let auditAction: AuditAction = AUDIT_ACTIONS.USER_UPDATED;
+    if (shouldDeactivate) {
+      auditAction = AUDIT_ACTIONS.USER_DEACTIVATED;
+    } else if (shouldActivate) {
+      auditAction = AUDIT_ACTIONS.USER_ACTIVATED;
+    }
+
+    const user = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: req.params.id },
+        data: {
+          ...(name && { name }),
+          ...(email && { email: email.toLowerCase() }),
+          ...(role && { role }),
+          rollNumber: rollNumber ?? undefined,
+          program: program ?? undefined,
+          branch: branch ?? undefined,
+          year: year !== undefined ? parseInt(year) : undefined,
+          semester: semester !== undefined ? parseInt(semester) : undefined,
+          secondLanguage: secondLanguage ?? undefined,
+          phone: phone ?? undefined,
+          active: active !== undefined ? active : undefined,
+          ...(shouldDeactivate && { tokenVersion: { increment: 1 } }),
+        },
+        select: {
+          id: true, name: true, email: true, role: true,
+          rollNumber: true, program: true, branch: true,
+          year: true, semester: true, phone: true, active: true,
+        },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: auditAction,
+        targetId: updated.id,
+        details: {
+          name: updated.name,
+          email: updated.email,
+          role: updated.role,
+          active: updated.active,
+          previousActive: existingUser.active,
+        },
+        tx,
+      });
+
+      return updated;
     });
 
     res.json({ user });
@@ -249,12 +294,25 @@ router.put('/users/:id/reset-password', authenticate, authorize('LIBRARIAN'), as
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await prisma.user.update({
-      where: { id: req.params.id },
-      data: {
-        password: hashedPassword,
-        tokenVersion: { increment: 1 },
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: req.params.id },
+        data: {
+          password: hashedPassword,
+          tokenVersion: { increment: 1 },
+        },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.PASSWORD_RESET,
+        targetId: targetUser.id,
+        details: {
+          email: targetUser.email,
+          role: targetUser.role,
+        },
+        tx,
+      });
     });
 
     res.json({ message: 'Password reset successfully.' });
@@ -282,7 +340,22 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
       return;
     }
 
-    await prisma.user.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: req.params.id } });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.USER_DELETED,
+        targetId: targetUser.id,
+        details: {
+          name: targetUser.name,
+          email: targetUser.email,
+          role: targetUser.role,
+        },
+        tx,
+      });
+    });
+
     res.json({ message: 'User deleted successfully.' });
   } catch (error) {
     console.error('Delete user error:', error);

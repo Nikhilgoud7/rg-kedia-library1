@@ -171,6 +171,16 @@ export class TestDataManager {
 
     try {
       if (userIds.length > 0) {
+        // Delete audit logs created by or targeting these users
+        await this.prisma.auditLog.deleteMany({
+          where: {
+            OR: [
+              { actorId: { in: userIds } },
+              { targetId: { in: userIds } },
+            ],
+          },
+        });
+
         // Delete notifications
         await this.prisma.notification.deleteMany({
           where: { userId: { in: userIds } },
@@ -188,6 +198,10 @@ export class TestDataManager {
       }
 
       if (bookIds.length > 0) {
+        // Delete audit logs targeting these books
+        await this.prisma.auditLog.deleteMany({
+          where: { targetId: { in: bookIds } },
+        });
         // Delete any lendings referencing copies of created books
         await this.prisma.lending.deleteMany({
           where: { bookCopy: { bookId: { in: bookIds } } },
