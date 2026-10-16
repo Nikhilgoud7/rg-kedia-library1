@@ -12,11 +12,14 @@
 - **Phase 3G-1 Correction**: Strict TRUST_PROXY Non-Negative Integer Enforcement (`457bcd6`)
 - **Phase 3G-2**: PostgreSQL Migration on Neon (`provider = "postgresql"`, directUrl, baseline migration, advisory locks, case-insensitive search, concurrency & consistency verified, `68c7537`)
 - **Phase 3G-3**: Committed Automated Regression Suite (`c1d116f`) — 5 permanent suites under `tests/`, 124 verified assertions, test safety guards (`ALLOW_TESTS=true`, `NODE_ENV=production` blocker), synthetic isolation & cascade cleanup, PostgreSQL concurrency & advisory lock tests, independent read-only audit approved (VERDICT: APPROVED).
+- **Phase 3G-4A**: Read-Only Demo Deployment Readiness Audit (Verdict: READY WITH IDENTIFIED PREREQUISITES)
+- **Phase 3G-4B**: Unified Render Demo Deployment Configuration (`9b2cc29`) — unified single-origin build (`prisma:generate`, `build:client`, `build:server`, `start`), Express static serving & SPA fallback, API 404 guard, Render Blueprint (`render.yaml`), 124/124 regression assertions passed, 8/8 production smoke checks passed. Live deployment pending.
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 1 — finish Phase 3G (Demo Deployment)
 - **Current Sub-Phase**: 1d ("Phase 3G-4: demo deployment")
-- **Current Loop Step**: A (Audit / Plan)
+- **Current Loop Step**: B (Local Configuration & Verification Complete — Live Deployment Pending)
+- **Current Commit**: `9b2cc29`
 
 ## Stage 1b PostgreSQL Summary
 - **Database Engine**: Neon PostgreSQL (project: `shy-haze-95283527`, branch: `production`, AWS ap-southeast-1)
@@ -48,6 +51,43 @@
   - Synthetic data namespace (`reg_<hex4>_*@example.test`) with guaranteed cascade cleanup.
   - Recursive response secret auditing (`findLeakedSecrets`).
 - **Audit Approval**: Phase 3G-3A independent read-only audit completed with verdict `APPROVED (PASS WITH MINOR OBSERVATIONS)`.
+
+## Phase 3G-4 Demo Deployment Configuration Summary
+- **Unified Single-Origin Architecture**: Single Node.js service serving both Express REST APIs (`/api/*`) and Vite static frontend (`client/dist/*`). Eliminates cross-origin issues and protects strict cookie policies.
+- **Production Build Pipeline**:
+  - `npm run prisma:generate` (`prisma generate`)
+  - `npm run build:client` (`npm --prefix client run build`)
+  - `npm run build:server` (`tsc`)
+  - `npm run build` (unified orchestration)
+  - `npm start` (`node dist/server/index.js`)
+- **Express Serving Enhancements**:
+  - Dynamic `findProjectRoot` resolution supporting execution from both `server/` and compiled `dist/server/`.
+  - Unmatched API 404 guard (`app.all('/api/*', ...)` returning JSON error `{ error: 'API endpoint not found' }`, strictly preventing SPA HTML redirection for API requests).
+  - Client static asset mounting via `express.static(clientDist)`.
+  - React Router HTML5 SPA fallback (`app.get('*', ...)` returning `client/dist/index.html`).
+  - Upload file serving with JSON 404 fallback for missing assets.
+- **Render Blueprint (`render.yaml`)**:
+  - Free-tier Web Service configuration in `singapore` region.
+  - Build command: `npm install --include=dev && npm --prefix client install --include=dev && npm run build && npx prisma migrate deploy`.
+  - Start command: `npm start`.
+  - Health check endpoint: `/api/health`.
+  - Environment variable definitions with `sync: false` for all secrets (`JWT_SECRET`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CLIENT_URL`).
+  - Safe database deployment: runs `npx prisma migrate deploy` in build without data loss or reset.
+- **Verification Results**:
+  - Backend TypeScript compilation: 0 errors (`npx tsc --noEmit`).
+  - Frontend TypeScript compilation: 0 errors (`cd client && npx tsc --noEmit`).
+  - Full production build: Clean build in 5.25s.
+  - Regression testing: 124/124 assertions passing (`npm test`, 55.59s).
+  - Production startup smoke test: 8/8 assertions passing on compiled bundle (`node dist/server/index.js` on port 5055):
+    1. `GET /api/health` -> 200 OK (DB connected)
+    2. `GET /` -> 200 OK (HTML document served)
+    3. `GET /student/dashboard` -> 200 OK (SPA fallback HTML served)
+    4. `GET /api/nonexistent-endpoint` -> 404 JSON (`{ error: 'API endpoint not found' }`)
+    5. `GET /assets/index-CSVDc8fS.css` -> 200 OK (`text/css`)
+    6. `GET /uploads/nonexistent.pdf` -> 404 JSON (`{ error: 'File not found' }`)
+    7. `GET /api/books` -> 401 Unauthorized (Auth middleware active)
+    8. `POST /api/auth/login` -> 400 Bad Request (Auth route active)
+- **Deployment Status**: Local configuration verified. Live deployment pending user approval.
 
 ## Active Test Commands
 - **Full Automated Regression Suite**: `npm test`
