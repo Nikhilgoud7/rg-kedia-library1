@@ -8,8 +8,22 @@ import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Resolve project root directory safely across both development (server/) and production (dist/server/)
+function findProjectRoot(startDir: string): string {
+  let current = startDir;
+  while (current !== path.parse(current).root) {
+    if (fs.existsSync(path.join(current, 'package.json'))) {
+      return current;
+    }
+    current = path.dirname(current);
+  }
+  return path.resolve(startDir, '..');
+}
+
+const rootDir = findProjectRoot(__dirname);
+
 // Configure multer for file uploads
-const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'exam-papers');
+const uploadDir = path.join(rootDir, 'uploads', 'exam-papers');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
