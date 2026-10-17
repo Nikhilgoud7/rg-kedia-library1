@@ -4,14 +4,18 @@ import { User, Role, Program, SecondLanguage } from '../../types';
 import Modal from '../../components/common/Modal';
 import { Plus, Search, Users, Key, GraduationCap, ShieldCheck, CheckCircle2, XCircle, Pencil, BookMarked } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 export const ManageUsers: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [programFilter, setProgramFilter] = useState<string>('');
   const [branchFilter, setBranchFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const activeLibrariansCount = users.filter((u) => u.role === 'LIBRARIAN' && u.active).length;
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -110,6 +114,19 @@ export const ManageUsers: React.FC = () => {
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
+    if (selectedUser.id === currentUser?.id && editFormData.role !== 'LIBRARIAN') {
+      toast.error('Cannot demote your own account from LIBRARIAN role.');
+      return;
+    }
+    if (
+      selectedUser.role === 'LIBRARIAN' &&
+      selectedUser.active &&
+      activeLibrariansCount <= 1 &&
+      editFormData.role !== 'LIBRARIAN'
+    ) {
+      toast.error('Cannot demote the last active librarian.');
+      return;
+    }
     try {
       await api.put(`/admin/users/${selectedUser.id}`, editFormData);
       toast.success(`Member details updated for ${editFormData.name}!`);
@@ -135,12 +152,20 @@ export const ManageUsers: React.FC = () => {
   };
 
   const handleToggleStatus = async (user: User) => {
+    if (user.id === currentUser?.id && user.active) {
+      toast.error('Cannot deactivate your own account.');
+      return;
+    }
+    if (user.role === 'LIBRARIAN' && user.active && activeLibrariansCount <= 1) {
+      toast.error('Cannot deactivate the last active librarian.');
+      return;
+    }
     try {
       await api.put(`/admin/users/${user.id}`, { active: !user.active });
       toast.success(`User ${user.active ? 'deactivated' : 'activated'}`);
       fetchUsers();
-    } catch (err) {
-      toast.error('Failed to update status');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update status');
     }
   };
 
@@ -278,17 +303,29 @@ export const ManageUsers: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          u.role === 'STUDENT'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : u.role === 'TEACHER'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}
-                      >
-                        {u.role}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            u.role === 'STUDENT'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : u.role === 'TEACHER'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                        {currentUser?.id === u.id && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Current User
+                          </span>
+                        )}
+                        {u.role === 'LIBRARIAN' && u.active && activeLibrariansCount <= 1 && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                            Sole Active Librarian
+                          </span>
+                        )}
+                      </div>
                       {u.rollNumber && (
                         <div className="text-slate-700 font-mono font-bold mt-1 text-[11px]">
                           {u.rollNumber}
@@ -360,17 +397,35 @@ export const ManageUsers: React.FC = () => {
                         >
                           <Key className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleToggleStatus(u)}
-                          title={u.active ? 'Deactivate user' : 'Activate user'}
-                          className={`p-1.5 rounded-lg transition ${
-                            u.active
-                              ? 'text-emerald-600 hover:bg-emerald-50'
-                              : 'text-red-500 hover:bg-red-50'
-                          }`}
-                        >
-                          {u.active ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                        </button>
+                        {(() => {
+                          const isSelfActive = currentUser?.id === u.id && u.active;
+                          const isSoleActive = u.role === 'LIBRARIAN' && u.active && activeLibrariansCount <= 1;
+                          const isToggleDisabled = isSelfActive || isSoleActive;
+                          const toggleTitle = isSelfActive
+                            ? 'Cannot deactivate your own account'
+                            : isSoleActive
+                            ? 'Cannot deactivate the sole active librarian'
+                            : u.active
+                            ? 'Deactivate user'
+                            : 'Activate user';
+
+                          return (
+                            <button
+                              onClick={() => !isToggleDisabled && handleToggleStatus(u)}
+                              disabled={isToggleDisabled}
+                              title={toggleTitle}
+                              className={`p-1.5 rounded-lg transition ${
+                                isToggleDisabled
+                                  ? 'opacity-30 cursor-not-allowed text-slate-400'
+                                  : u.active
+                                  ? 'text-emerald-600 hover:bg-emerald-50'
+                                  : 'text-red-500 hover:bg-red-50'
+                              }`}
+                            >
+                              {u.active ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -623,16 +678,42 @@ export const ManageUsers: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Role *</label>
-              <select
-                value={editFormData.role}
-                onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as Role })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold"
-              >
-                <option value="STUDENT">Student</option>
-                <option value="TEACHER">Faculty Member (Teacher)</option>
-                <option value="LIBRARIAN">Librarian Administrator</option>
-              </select>
+              {(() => {
+                const isSelf = selectedUser?.id === currentUser?.id;
+                const isSoleActive =
+                  selectedUser?.role === 'LIBRARIAN' &&
+                  selectedUser?.active &&
+                  activeLibrariansCount <= 1;
+                const isRoleDisabled = isSelf || isSoleActive;
+
+                return (
+                  <>
+                    <label className="block font-bold text-slate-700 mb-1">Role *</label>
+                    <select
+                      value={editFormData.role}
+                      disabled={isRoleDisabled}
+                      onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as Role })}
+                      className={`w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold ${
+                        isRoleDisabled ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <option value="STUDENT">Student</option>
+                      <option value="TEACHER">Faculty Member (Teacher)</option>
+                      <option value="LIBRARIAN">Librarian Administrator</option>
+                    </select>
+                    {isSelf && (
+                      <p className="text-[11px] text-amber-600 mt-1 font-medium">
+                        You cannot change your own role as current administrator.
+                      </p>
+                    )}
+                    {!isSelf && isSoleActive && (
+                      <p className="text-[11px] text-amber-600 mt-1 font-medium">
+                        Role locked: This is the sole active librarian.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <div>
               <label className="block font-bold text-slate-700 mb-1">Phone Number (Optional)</label>

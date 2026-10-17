@@ -8,6 +8,7 @@ import { runConcurrencyTests } from './suites/concurrency.test.js';
 import { runNotificationTests } from './suites/notification.test.js';
 import { runDemoAndRetentionTests } from './suites/demoAndRetention.test.js';
 import { runAuditLogTests } from './suites/auditLog.test.js';
+import { runUserHardeningTests } from './suites/userHardening.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -17,6 +18,7 @@ const SUITES = {
   notification: { name: 'Notification Regression Suite (Step 7)', fn: runNotificationTests },
   demo: { name: 'Demo Safeguards & Retention Suite (Phase 3G-4C)', fn: runDemoAndRetentionTests },
   audit: { name: 'AuditLog Infrastructure & Administrative Logging Suite (Phase 5B)', fn: runAuditLogTests },
+  userHardening: { name: 'User Management Hardening & Administrative Protection Suite (Phase 5C)', fn: runUserHardeningTests },
 };
 
 async function checkHealth(url) {

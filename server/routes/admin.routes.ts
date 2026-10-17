@@ -4,6 +4,15 @@ import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth
 import { DEMO_MODE } from '../config.js';
 import { logAdminAction, AUDIT_ACTIONS, AuditAction } from '../lib/auditLogger.js';
 
+class AdminGuardError extends Error {
+  statusCode: number;
+  constructor(message: string) {
+    super(message);
+    this.name = 'AdminGuardError';
+    this.statusCode = 400;
+  }
+}
+
 const router = Router();
 
 // GET /api/admin/dashboard - Dashboard statistics
@@ -212,8 +221,27 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
       }
     }
 
+    // 1. Self-protection: Librarian cannot deactivate their own account
+    if (req.params.id === req.user!.id && active === false) {
+      res.status(400).json({ error: 'Cannot deactivate your own account.' });
+      return;
+    }
+
+    // 2. Self-protection: Librarian cannot demote their own account
+    if (req.params.id === req.user!.id && role !== undefined && role !== 'LIBRARIAN') {
+      res.status(400).json({ error: 'Cannot demote your own account from LIBRARIAN role.' });
+      return;
+    }
+
+    const isTargetActiveLibrarian = existingUser.role === 'LIBRARIAN' && existingUser.active === true;
+    const isDeactivating = active === false && existingUser.active === true;
+    const isDemoting = role !== undefined && role !== 'LIBRARIAN' && existingUser.role === 'LIBRARIAN';
+    const isReducingLibrarianCapacity = isTargetActiveLibrarian && (isDeactivating || isDemoting);
+
     const shouldDeactivate = active === false && existingUser.active === true;
     const shouldActivate = active === true && existingUser.active === false;
+    const roleChanged = role !== undefined && role !== existingUser.role;
+    const shouldBumpToken = shouldDeactivate || roleChanged;
 
     let auditAction: AuditAction = AUDIT_ACTIONS.USER_UPDATED;
     if (shouldDeactivate) {
@@ -223,6 +251,17 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
     }
 
     const user = await prisma.$transaction(async (tx) => {
+      if (isReducingLibrarianCapacity) {
+        // Concurrency lock to serialize administrative librarian changes
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'admin:librarians'}))`;
+        const activeLibrarians = await tx.user.count({
+          where: { role: 'LIBRARIAN', active: true },
+        });
+        if (activeLibrarians <= 1) {
+          throw new AdminGuardError('Cannot deactivate or demote the last active librarian in the system.');
+        }
+      }
+
       const updated = await tx.user.update({
         where: { id: req.params.id },
         data: {
@@ -237,7 +276,7 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
           secondLanguage: secondLanguage ?? undefined,
           phone: phone ?? undefined,
           active: active !== undefined ? active : undefined,
-          ...(shouldDeactivate && { tokenVersion: { increment: 1 } }),
+          ...(shouldBumpToken && { tokenVersion: { increment: 1 } }),
         },
         select: {
           id: true, name: true, email: true, role: true,
@@ -254,6 +293,7 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
           name: updated.name,
           email: updated.email,
           role: updated.role,
+          previousRole: existingUser.role,
           active: updated.active,
           previousActive: existingUser.active,
         },
@@ -264,7 +304,11 @@ router.put('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthR
     });
 
     res.json({ user });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.statusCode === 400 || error?.name === 'AdminGuardError') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('Update user error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
@@ -340,7 +384,19 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
       return;
     }
 
+    const isTargetActiveLibrarian = targetUser.role === 'LIBRARIAN' && targetUser.active === true;
+
     await prisma.$transaction(async (tx) => {
+      if (isTargetActiveLibrarian) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'admin:librarians'}))`;
+        const activeLibrarians = await tx.user.count({
+          where: { role: 'LIBRARIAN', active: true },
+        });
+        if (activeLibrarians <= 1) {
+          throw new AdminGuardError('Cannot delete the last active librarian in the system.');
+        }
+      }
+
       await tx.user.delete({ where: { id: req.params.id } });
 
       await logAdminAction({
@@ -357,7 +413,11 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
     });
 
     res.json({ message: 'User deleted successfully.' });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.statusCode === 400 || error?.name === 'AdminGuardError') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Server error deleting user.' });
   }
