@@ -7,6 +7,7 @@ import {
   RENEWAL_DAYS,
   MAX_RENEWALS,
 } from '../lib/lendingPolicy.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
 
 const router = Router();
 
@@ -370,6 +371,24 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
         },
       });
 
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.LENDING_APPROVED,
+        targetId: lending.id,
+        details: {
+          requestId: request.id,
+          bookId: request.bookId,
+          bookTitle: request.book.title,
+          userId: request.userId,
+          borrowerName: request.user.name,
+          borrowerRollNumber: request.user.rollNumber,
+          copyId: claimedCopyId,
+          dueDate: dueDate.toISOString(),
+          daysToReturn,
+        },
+        tx,
+      });
+
       const updatedRequest = await tx.bookRequest.findUnique({
         where: { id: request.id },
         include: { book: true, user: true },
@@ -421,6 +440,22 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
           type: 'INFO',
           link: request.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.LENDING_REJECTED,
+        targetId: request.id,
+        details: {
+          requestId: request.id,
+          bookId: request.bookId,
+          bookTitle: request.book.title,
+          userId: request.userId,
+          borrowerName: request.user.name,
+          borrowerRollNumber: request.user.rollNumber,
+          reason: reason || null,
+        },
+        tx,
       });
 
       return await tx.bookRequest.findUnique({ where: { id: request.id } });
@@ -503,6 +538,24 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
           status: 'PENDING',
         },
         data: { status: 'APPROVED' },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.LENDING_RETURNED,
+        targetId: lending.id,
+        details: {
+          lendingId: lending.id,
+          bookId: lending.bookCopy.bookId,
+          bookTitle: lending.bookCopy.book.title,
+          copyId: lending.bookCopyId,
+          userId: lending.userId,
+          borrowerName: lending.user.name,
+          borrowerRollNumber: lending.user.rollNumber,
+          daysOverdue,
+          fine: 0,
+        },
+        tx,
       });
 
       return { daysOverdue };
@@ -832,11 +885,20 @@ router.post('/cancel-request/:requestId', authenticate, async (req: AuthRequest,
 // GET /api/lending/all - All active lendings (Teacher and Librarian)
 router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { program, branch, search } = req.query;
+    const { program, branch, search, status, overdueOnly } = req.query;
 
-    const where: any = {
-      status: { in: ['ISSUED', 'OVERDUE'] },
-    };
+    const where: any = {};
+
+    if (status) {
+      where.status = status as string;
+    } else {
+      where.status = { in: ['ISSUED', 'OVERDUE'] };
+    }
+
+    if (String(overdueOnly) === 'true') {
+      where.status = 'ISSUED';
+      where.dueDate = { lt: new Date() };
+    }
 
     if (program) {
       where.user = { ...(where.user || {}), program: program as string };
@@ -852,19 +914,39 @@ router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: 
       ];
     }
 
-    const lendings = await prisma.lending.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } },
-        bookCopy: {
-          include: { book: { select: { id: true, title: true, author: true, segment: true } } },
-        },
-      },
-      orderBy: { issuedDate: 'desc' },
-    });
+    const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string, 10) || 20));
+    const skip = (page - 1) * limit;
 
-    res.json({ lendings });
+    const [total, lendings] = await Promise.all([
+      prisma.lending.count({ where }),
+      prisma.lending.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } },
+          bookCopy: {
+            include: { book: { select: { id: true, title: true, author: true, segment: true } } },
+          },
+        },
+        orderBy: { issuedDate: 'desc' },
+        ...(isPaginated ? { skip, take: limit } : {}),
+      }),
+    ]);
+
+    const totalPages = isPaginated ? Math.ceil(total / limit) : 1;
+
+    res.json({
+      lendings,
+      pagination: {
+        total,
+        page: isPaginated ? page : 1,
+        limit: isPaginated ? limit : total,
+        totalPages,
+      },
+    });
   } catch (error) {
+    console.error('Fetch all lendings error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
 });
@@ -894,19 +976,61 @@ router.get('/overdue', authenticate, authorize('LIBRARIAN'), async (_req: AuthRe
 });
 
 // GET /api/lending/requests - Pending requests (Librarian only)
-router.get('/requests', authenticate, authorize('LIBRARIAN'), async (_req: AuthRequest, res: Response): Promise<void> => {
+router.get('/requests', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const requests = await prisma.bookRequest.findMany({
-      where: { status: 'PENDING' },
-      include: {
-        user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } },
-        book: { select: { id: true, title: true, author: true, availableCopies: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const { status, type, search } = req.query;
 
-    res.json({ requests });
+    const where: any = {};
+
+    if (status && status !== 'ALL') {
+      where.status = status as string;
+    } else if (!status) {
+      where.status = 'PENDING';
+    }
+
+    if (type && type !== 'ALL') {
+      where.type = type as string;
+    }
+
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search as string, mode: 'insensitive' } } },
+        { user: { rollNumber: { contains: search as string, mode: 'insensitive' } } },
+        { book: { title: { contains: search as string, mode: 'insensitive' } } },
+      ];
+    }
+
+    const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const [total, requests] = await Promise.all([
+      prisma.bookRequest.count({ where }),
+      prisma.bookRequest.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, rollNumber: true, program: true, branch: true } },
+          book: { select: { id: true, title: true, author: true, availableCopies: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        ...(isPaginated ? { skip, take: limit } : {}),
+      }),
+    ]);
+
+    const totalPages = isPaginated ? Math.ceil(total / limit) : 1;
+
+    res.json({
+      requests,
+      pagination: {
+        total,
+        page: isPaginated ? page : 1,
+        limit: isPaginated ? limit : total,
+        totalPages,
+      },
+    });
   } catch (error) {
+    console.error('Fetch requests error:', error);
     res.status(500).json({ error: 'Server error.' });
   }
 });

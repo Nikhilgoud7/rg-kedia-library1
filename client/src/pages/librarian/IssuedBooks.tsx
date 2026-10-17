@@ -1,7 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../lib/api';
 import { Lending } from '../../types';
-import { CheckSquare, AlertTriangle, Search, Check, RotateCcw, Clock, IndianRupee } from 'lucide-react';
+import Modal from '../../components/common/Modal';
+import {
+  CheckSquare,
+  AlertTriangle,
+  Search,
+  Check,
+  RotateCcw,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  User,
+  ShieldCheck,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const IssuedBooks: React.FC = () => {
@@ -10,43 +23,73 @@ export const IssuedBooks: React.FC = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const fetchLendings = async () => {
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Return modal state
+  const [selectedReturnLending, setSelectedReturnLending] = useState<Lending | null>(null);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isProcessingReturn, setIsProcessingReturn] = useState(false);
+
+  const fetchLendings = useCallback(async () => {
     try {
       setLoading(true);
-      const endpoint = filter === 'OVERDUE' ? '/lending/overdue' : '/lending/all';
-      const res = await api.get(endpoint);
-      const data = filter === 'OVERDUE' ? res.data.overdue : res.data.lendings;
-      setLendings(data || []);
-    } catch (err) {
+      const params: any = {
+        page,
+        limit,
+      };
+
+      if (filter === 'OVERDUE') {
+        params.overdueOnly = 'true';
+      }
+
+      if (search.trim()) {
+        params.search = search.trim();
+      }
+
+      const res = await api.get('/lending/all', { params });
+      setLendings(res.data.lendings || []);
+
+      if (res.data.pagination) {
+        setTotal(res.data.pagination.total);
+        setTotalPages(res.data.pagination.totalPages || 1);
+      } else {
+        setTotal(res.data.lendings?.length || 0);
+        setTotalPages(1);
+      }
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to load lendings');
+      toast.error(err.response?.data?.error || 'Failed to load lendings');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, filter, search]);
 
   useEffect(() => {
     fetchLendings();
-  }, [filter]);
+  }, [fetchLendings]);
 
-  const handleReturn = async (lendingId: string, bookTitle: string) => {
-    if (!window.confirm(`Confirm return of "${bookTitle}"?`)) return;
+  const handleReturnConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReturnLending) return;
     try {
-      await api.post(`/lending/return/${lendingId}`);
-      toast.success(`Book "${bookTitle}" returned successfully!`);
+      setIsProcessingReturn(true);
+      await api.post(`/lending/return/${selectedReturnLending.id}`);
+      toast.success(
+        `Book "${selectedReturnLending.bookCopy?.book?.title}" returned and copy marked AVAILABLE!`
+      );
+      setIsReturnModalOpen(false);
+      setSelectedReturnLending(null);
       fetchLendings();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to process return');
+    } finally {
+      setIsProcessingReturn(false);
     }
   };
-
-  const filtered = lendings.filter((l) => {
-    const term = search.toLowerCase();
-    const title = l.bookCopy?.book?.title?.toLowerCase() || '';
-    const student = l.user?.name?.toLowerCase() || '';
-    const roll = l.user?.rollNumber?.toLowerCase() || '';
-    return title.includes(term) || student.includes(term) || roll.includes(term);
-  });
 
   return (
     <div className="space-y-6">
@@ -60,15 +103,23 @@ export const IssuedBooks: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
           <button
-            onClick={() => setFilter('ALL')}
+            onClick={() => {
+              setFilter('ALL');
+              setPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              filter === 'ALL' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              filter === 'ALL'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            All Active ({lendings.length})
+            All Active
           </button>
           <button
-            onClick={() => setFilter('OVERDUE')}
+            onClick={() => {
+              setFilter('OVERDUE');
+              setPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
               filter === 'OVERDUE'
                 ? 'bg-red-600 text-white shadow-xs'
@@ -87,10 +138,13 @@ export const IssuedBooks: React.FC = () => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
-            placeholder="Search active records by book title, student name, or roll number..."
+            placeholder="Search active records by book title, student/teacher name, or roll number..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500"
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
           />
         </div>
       </div>
@@ -113,17 +167,24 @@ export const IssuedBooks: React.FC = () => {
               {loading ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
-                    Loading issued records...
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mb-2"></div>
+                    <p className="text-xs font-medium">Loading issued records...</p>
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : lendings.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
-                    No active issued records found
+                    <Check className="w-8 h-8 text-emerald-500 mx-auto mb-1" />
+                    <p className="font-bold text-slate-700">No active records found</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {filter === 'OVERDUE'
+                        ? 'Great news! No books are currently overdue.'
+                        : 'No book copies are currently checked out.'}
+                    </p>
                   </td>
                 </tr>
               ) : (
-                filtered.map((l) => {
+                lendings.map((l) => {
                   const now = new Date();
                   const dueDate = new Date(l.dueDate);
                   const isOverdue = now > dueDate;
@@ -164,7 +225,11 @@ export const IssuedBooks: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className={`font-semibold ${isOverdue ? 'text-red-600 font-bold' : 'text-slate-800'}`}>
+                        <span
+                          className={`font-semibold ${
+                            isOverdue ? 'text-red-600 font-bold' : 'text-slate-800'
+                          }`}
+                        >
                           {dueDate.toLocaleDateString()}
                         </span>
                       </td>
@@ -172,9 +237,12 @@ export const IssuedBooks: React.FC = () => {
                       <td className="py-3.5 px-4">
                         {isOverdue ? (
                           <div>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-red-50 text-red-700 px-2 py-0.5 rounded-full border border-red-200">
-                              <AlertTriangle className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-red-50 text-red-700 px-2.5 py-1 rounded-full border border-red-200">
+                              <AlertTriangle className="w-3 h-3 text-red-500" />
                               {daysOverdue} Days Late
+                            </span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                              No monetary fine
                             </span>
                           </div>
                         ) : (
@@ -186,9 +254,10 @@ export const IssuedBooks: React.FC = () => {
 
                       <td className="py-3.5 px-4 text-right">
                         <button
-                          onClick={() =>
-                            handleReturn(l.id, l.bookCopy?.book?.title || 'Book')
-                          }
+                          onClick={() => {
+                            setSelectedReturnLending(l);
+                            setIsReturnModalOpen(true);
+                          }}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl font-extrabold text-xs transition shadow-xs inline-flex items-center gap-1"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
@@ -202,7 +271,115 @@ export const IssuedBooks: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-500">
+              Showing Page <strong className="text-slate-900">{page}</strong> of{' '}
+              <strong className="text-slate-900">{totalPages}</strong> ({total} total active loans)
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 transition shadow-2xs"
+                title="Previous Page"
+              >
+                <ChevronLeft className="w-4 h-4 text-slate-600" />
+              </button>
+              <span className="font-bold text-slate-700 px-2">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 transition shadow-2xs"
+                title="Next Page"
+              >
+                <ChevronRight className="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Return Confirmation Modal */}
+      <Modal
+        isOpen={isReturnModalOpen}
+        onClose={() => {
+          setIsReturnModalOpen(false);
+          setSelectedReturnLending(null);
+        }}
+        title="Confirm Book Return"
+        maxWidth="md"
+      >
+        {selectedReturnLending && (
+          <form onSubmit={handleReturnConfirm} className="space-y-4 text-xs">
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+              <div className="flex items-start gap-2">
+                <BookOpen className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    {selectedReturnLending.bookCopy?.book?.title}
+                  </h4>
+                  <p className="text-slate-500 text-[11px]">
+                    by {selectedReturnLending.bookCopy?.book?.author}
+                  </p>
+                  <p className="text-slate-400 text-[10px] font-mono mt-0.5">
+                    Physical Copy #{selectedReturnLending.bookCopy?.copyNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
+                <User className="w-4 h-4 text-slate-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-slate-800">
+                    {selectedReturnLending.user?.name}
+                  </span>
+                  {selectedReturnLending.user?.rollNumber && (
+                    <span className="text-slate-500 text-[11px] font-mono ml-1">
+                      ({selectedReturnLending.user.rollNumber})
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Processing this return will restore the physical copy to <strong>AVAILABLE</strong>{' '}
+                and safely increment catalog inventory.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isProcessingReturn}
+                onClick={() => {
+                  setIsReturnModalOpen(false);
+                  setSelectedReturnLending(null);
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessingReturn}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition shadow-xs flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                {isProcessingReturn ? 'Processing...' : 'Confirm Return'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 };

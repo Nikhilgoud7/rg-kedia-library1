@@ -9,6 +9,7 @@ import { runNotificationTests } from './suites/notification.test.js';
 import { runDemoAndRetentionTests } from './suites/demoAndRetention.test.js';
 import { runAuditLogTests } from './suites/auditLog.test.js';
 import { runUserHardeningTests } from './suites/userHardening.test.js';
+import { runLendingQueueTests } from './suites/lendingQueue.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -19,6 +20,7 @@ const SUITES = {
   demo: { name: 'Demo Safeguards & Retention Suite (Phase 3G-4C)', fn: runDemoAndRetentionTests },
   audit: { name: 'AuditLog Infrastructure & Administrative Logging Suite (Phase 5B)', fn: runAuditLogTests },
   userHardening: { name: 'User Management Hardening & Administrative Protection Suite (Phase 5C)', fn: runUserHardeningTests },
+  lendingQueue: { name: 'Lending Requests & Issued Books Queue Suite (Phase 5D)', fn: runLendingQueueTests },
 };
 
 async function checkHealth(url) {
