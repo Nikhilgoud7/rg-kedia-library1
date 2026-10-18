@@ -10,6 +10,7 @@ import { runDemoAndRetentionTests } from './suites/demoAndRetention.test.js';
 import { runAuditLogTests } from './suites/auditLog.test.js';
 import { runUserHardeningTests } from './suites/userHardening.test.js';
 import { runLendingQueueTests } from './suites/lendingQueue.test.js';
+import { runExamGuideTests } from './suites/examGuide.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -21,6 +22,7 @@ const SUITES = {
   audit: { name: 'AuditLog Infrastructure & Administrative Logging Suite (Phase 5B)', fn: runAuditLogTests },
   userHardening: { name: 'User Management Hardening & Administrative Protection Suite (Phase 5C)', fn: runUserHardeningTests },
   lendingQueue: { name: 'Lending Requests & Issued Books Queue Suite (Phase 5D)', fn: runLendingQueueTests },
+  examGuide: { name: 'Exam Guide & Academic Material Manager Suite (Phase 5E)', fn: runExamGuideTests },
 };
 
 async function checkHealth(url) {
@@ -89,7 +91,7 @@ async function main() {
 
   // Parse CLI flags
   const args = process.argv.slice(2);
-  const suiteArg = args.find((a) => a.startsWith('--suite='))?.split('=')[1] || args.find((a) => SUITES[a.toLowerCase()]);
+  const suiteArg = args.find((a) => a.startsWith('--suite='))?.split('=')[1] || args.find((a) => Object.keys(SUITES).some((k) => k.toLowerCase() === a.toLowerCase()));
   const portArg = args.find((a) => a.startsWith('--port='))?.split('=')[1] || process.env.PORT || '5000';
   const port = parseInt(portArg, 10);
   const baseUrl = `http://localhost:${port}`;
@@ -99,8 +101,9 @@ async function main() {
 
   // Determine target suites
   const suitesToRun = [];
-  if (suiteArg && SUITES[suiteArg.toLowerCase()]) {
-    suitesToRun.push({ key: suiteArg.toLowerCase(), ...SUITES[suiteArg.toLowerCase()] });
+  const matchingKey = suiteArg ? Object.keys(SUITES).find((k) => k.toLowerCase() === suiteArg.toLowerCase()) : null;
+  if (matchingKey && SUITES[matchingKey]) {
+    suitesToRun.push({ key: matchingKey, ...SUITES[matchingKey] });
   } else {
     for (const [key, value] of Object.entries(SUITES)) {
       suitesToRun.push({ key, ...value });

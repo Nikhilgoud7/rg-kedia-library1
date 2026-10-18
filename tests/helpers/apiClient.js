@@ -59,7 +59,8 @@ export function createApiClient(baseUrl) {
     if (cookie) {
       reqHeaders['Cookie'] = cookie;
     }
-    if (body !== undefined && !reqHeaders['Content-Type']) {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body !== undefined && !isFormData && !reqHeaders['Content-Type']) {
       reqHeaders['Content-Type'] = 'application/json';
     }
 
@@ -67,7 +68,7 @@ export function createApiClient(baseUrl) {
     const res = await fetch(url, {
       method,
       headers: reqHeaders,
-      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+      body: body !== undefined ? (typeof body === 'string' || isFormData ? body : JSON.stringify(body)) : undefined,
     });
 
     // Check for Set-Cookie header

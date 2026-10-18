@@ -29,7 +29,8 @@
     "test:demo": "node tests/runner.js --allow-tests --suite=demo",
     "test:audit": "node tests/runner.js --allow-tests --suite=audit",
     "test:user-hardening": "node tests/runner.js --allow-tests --suite=userHardening",
-    "test:lending-queue": "node tests/runner.js --allow-tests --suite=lendingQueue"
+    "test:lending-queue": "node tests/runner.js --allow-tests --suite=lendingQueue",
+    "test:exam-guide": "node tests/runner.js --allow-tests --suite=examGuide"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

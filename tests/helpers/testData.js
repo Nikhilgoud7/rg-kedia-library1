@@ -195,6 +195,11 @@ export class TestDataManager {
         await this.prisma.bookRequest.deleteMany({
           where: { userId: { in: userIds } },
         });
+
+        // Delete exam papers uploaded by these users
+        await this.prisma.examPaper.deleteMany({
+          where: { uploadedById: { in: userIds } },
+        });
       }
 
       if (bookIds.length > 0) {
