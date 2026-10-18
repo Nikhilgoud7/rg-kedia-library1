@@ -11,6 +11,7 @@ import { runAuditLogTests } from './suites/auditLog.test.js';
 import { runUserHardeningTests } from './suites/userHardening.test.js';
 import { runLendingQueueTests } from './suites/lendingQueue.test.js';
 import { runExamGuideTests } from './suites/examGuide.test.js';
+import { runLibrarianPolishTests } from './suites/librarianPolish.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -23,6 +24,7 @@ const SUITES = {
   userHardening: { name: 'User Management Hardening & Administrative Protection Suite (Phase 5C)', fn: runUserHardeningTests },
   lendingQueue: { name: 'Lending Requests & Issued Books Queue Suite (Phase 5D)', fn: runLendingQueueTests },
   examGuide: { name: 'Exam Guide & Academic Material Manager Suite (Phase 5E)', fn: runExamGuideTests },
+  librarianPolish: { name: 'Librarian UX Polish & Governance Suite (Phase 5F)', fn: runLibrarianPolishTests },
 };
 
 async function checkHealth(url) {

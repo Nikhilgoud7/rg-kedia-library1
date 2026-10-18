@@ -30,7 +30,8 @@
     "test:audit": "node tests/runner.js --allow-tests --suite=audit",
     "test:user-hardening": "node tests/runner.js --allow-tests --suite=userHardening",
     "test:lending-queue": "node tests/runner.js --allow-tests --suite=lendingQueue",
-    "test:exam-guide": "node tests/runner.js --allow-tests --suite=examGuide"
+    "test:exam-guide": "node tests/runner.js --allow-tests --suite=examGuide",
+    "test:librarian-polish": "node tests/runner.js --allow-tests --suite=librarianPolish"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

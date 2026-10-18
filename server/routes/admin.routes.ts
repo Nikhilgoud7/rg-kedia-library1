@@ -423,4 +423,82 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
   }
 });
 
+// GET /api/admin/audit-logs - List audit logs (Librarian only)
+router.get(
+  '/audit-logs',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { action, search, page = '1', limit = '20' } = req.query;
+
+      // Reject non-string or array parameters
+      const queryParams = [action, search, page, limit];
+      for (const param of queryParams) {
+        if (param !== undefined && (Array.isArray(param) || typeof param === 'object')) {
+          res.status(400).json({ error: 'Invalid query parameter.' });
+          return;
+        }
+      }
+
+      const parsedPage = Math.max(1, parseInt(page as string, 10) || 1);
+      const rawLimit = parseInt(limit as string, 10) || 20;
+      const parsedLimit = Math.min(100, Math.max(1, rawLimit));
+      const skip = (parsedPage - 1) * parsedLimit;
+
+      const where: any = {};
+
+      if (action && typeof action === 'string') {
+        where.action = action.trim();
+      }
+
+      if (search && typeof search === 'string') {
+        const trimmed = search.trim().substring(0, 100);
+        if (trimmed.length > 0) {
+          where.OR = [
+            { action: { contains: trimmed, mode: 'insensitive' } },
+            { actor: { name: { contains: trimmed, mode: 'insensitive' } } },
+            { actor: { email: { contains: trimmed, mode: 'insensitive' } } },
+          ];
+        }
+      }
+
+      const [logs, total] = await Promise.all([
+        prisma.auditLog.findMany({
+          where,
+          include: {
+            actor: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+          orderBy: { timestamp: 'desc' },
+          skip,
+          take: parsedLimit,
+        }),
+        prisma.auditLog.count({ where }),
+      ]);
+
+      const totalPages = Math.ceil(total / parsedLimit) || 1;
+
+      res.json({
+        logs,
+        pagination: {
+          total,
+          page: parsedPage,
+          limit: parsedLimit,
+          totalPages,
+        },
+      });
+    } catch (error) {
+      console.error('List audit logs error:', error);
+      res.status(500).json({ error: 'Server error retrieving audit logs.' });
+    }
+  }
+);
+
 export default router;

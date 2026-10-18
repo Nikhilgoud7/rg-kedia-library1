@@ -20,6 +20,7 @@ import ManageExamGuide from './pages/librarian/ManageExamGuide';
 import LibrarianProfile from './pages/librarian/Profile';
 import LibrarianSettings from './pages/librarian/Settings';
 import LibrarianNotifications from './pages/librarian/Notifications';
+import LibrarianAuditLogs from './pages/librarian/AuditLogs';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -192,6 +193,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['LIBRARIAN']}>
                 <LibrarianSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/librarian/audit-logs"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <LibrarianAuditLogs />
               </ProtectedRoute>
             }
           />

@@ -16,6 +16,7 @@ import {
   Bell,
   UserCircle,
   Settings,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -31,6 +32,7 @@ export const Sidebar: React.FC = () => {
           { to: '/librarian/issued', label: 'Issued Books & Returns', icon: CheckSquare },
           { to: '/librarian/exam-guide', label: 'Exam Guide & Papers', icon: FileText },
           { to: '/librarian/users', label: 'Student & Faculty Users', icon: Users },
+          { to: '/librarian/audit-logs', label: 'Audit Trail', icon: ShieldCheck },
           { to: '/librarian/notifications', label: 'Notifications', icon: Bell },
           { to: '/librarian/profile', label: 'My Profile', icon: UserCircle },
           { to: '/librarian/settings', label: 'Settings', icon: Settings },
