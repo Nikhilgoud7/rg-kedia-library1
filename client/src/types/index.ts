@@ -35,8 +35,9 @@ export interface BookCopy {
   bookId: string;
   copyNumber: number;
   condition: string;
-  status: 'AVAILABLE' | 'ISSUED' | 'RESERVED' | 'LOST' | 'DAMAGED';
+  status: 'AVAILABLE' | 'ISSUED' | 'RESERVED' | 'LOST' | 'DAMAGED' | 'WITHDRAWN';
   barcode?: string | null;
+  shelfLocation?: string | null;
   lendings?: Lending[];
 }
 

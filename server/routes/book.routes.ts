@@ -1,6 +1,11 @@
 import { Router, Response } from 'express';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
-import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
+import { logAdminAction, AUDIT_ACTIONS, AuditAction } from '../lib/auditLogger.js';
+import {
+  calculateActualBookCounts,
+  reconcileBookCounters,
+  reconcileAllBookCounters,
+} from '../lib/inventoryReconciliation.js';
 
 const router = Router();
 
@@ -122,6 +127,51 @@ router.get('/segments', authenticate, async (_req: AuthRequest, res: Response): 
   }
 });
 
+// POST /api/books/inventory/reconcile - Reconcile inventory counters for one or all books (Librarian only)
+router.post('/inventory/reconcile', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { bookId } = req.body || {};
+
+    if (bookId !== undefined && bookId !== null) {
+      if (typeof bookId !== 'string' || !bookId.trim()) {
+        res.status(400).json({ error: 'Invalid bookId. Must be a non-empty string.' });
+        return;
+      }
+
+      const existing = await prisma.book.findUnique({
+        where: { id: bookId.trim() },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: 'Book not found.' });
+        return;
+      }
+
+      const result = await reconcileBookCounters(existing.id, { actorId: req.user!.id });
+      res.json({
+        message: 'Inventory reconciliation completed for book.',
+        result,
+      });
+      return;
+    }
+
+    // Bulk reconciliation
+    const summary = await reconcileAllBookCounters({ actorId: req.user!.id });
+    res.json({
+      message: 'Bulk inventory reconciliation completed.',
+      summary,
+    });
+  } catch (error: any) {
+    if (error?.status) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Inventory reconciliation error:', error);
+    res.status(500).json({ error: 'Server error during inventory reconciliation.' });
+  }
+});
+
 // GET /api/books/:id - Book details
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -150,7 +200,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
     } else {
       // STUDENT role: include copies without lendings or borrower identities
       copiesInclude = {
-        select: { id: true, copyNumber: true, condition: true, status: true, barcode: true },
+        select: { id: true, copyNumber: true, condition: true, status: true, barcode: true, shelfLocation: true },
       };
     }
 
@@ -340,90 +390,457 @@ router.delete('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
   }
 });
 
-// PUT /api/books/copies/:copyId - Update physical book copy condition, status, and barcode (Librarian only)
-router.put('/copies/:copyId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/books/:id/copies - Add physical copies to an existing book (Librarian only)
+router.post('/:id/copies', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { condition, status, barcode } = req.body;
+    const { count = 1, condition = 'Good', shelfLocation, barcode, copies } = req.body;
 
-    const copy = await prisma.bookCopy.findUnique({
-      where: { id: req.params.copyId },
-      include: { book: true },
-    });
+    const allowedConditions = ['Good', 'Fair', 'Poor', 'Damaged'];
 
-    if (!copy) {
-      res.status(404).json({ error: 'Book copy not found.' });
-      return;
-    }
+    // Validate request payload
+    const copySpecs: Array<{ barcode?: string | null; condition?: string; shelfLocation?: string | null }> = [];
 
-    if (condition && !['Good', 'Fair', 'Poor', 'Damaged'].includes(condition)) {
-      res.status(400).json({ error: 'Invalid condition. Allowed: Good, Fair, Poor, Damaged.' });
-      return;
-    }
-
-    if (status && !['AVAILABLE', 'ISSUED', 'RESERVED', 'LOST', 'DAMAGED'].includes(status)) {
-      res.status(400).json({ error: 'Invalid status. Allowed: AVAILABLE, ISSUED, RESERVED, LOST, DAMAGED.' });
-      return;
-    }
-
-    // Check barcode uniqueness if updating barcode
-    if (barcode !== undefined && barcode !== null && barcode !== '') {
-      const existingBarcode = await prisma.bookCopy.findFirst({
-        where: { barcode, id: { not: req.params.copyId } },
-      });
-      if (existingBarcode) {
-        res.status(409).json({ error: 'Barcode is already assigned to another book copy.' });
+    if (copies !== undefined) {
+      if (!Array.isArray(copies) || copies.length === 0 || copies.length > 50) {
+        res.status(400).json({ error: 'Copies must be an array of 1 to 50 items.' });
         return;
+      }
+      for (let i = 0; i < copies.length; i++) {
+        const item = copies[i];
+        if (item.condition && !allowedConditions.includes(item.condition)) {
+          res.status(400).json({ error: `Invalid condition "${item.condition}" at index ${i}. Allowed: Good, Fair, Poor, Damaged.` });
+          return;
+        }
+        copySpecs.push({
+          barcode: item.barcode ? String(item.barcode).trim() : null,
+          condition: item.condition || condition || 'Good',
+          shelfLocation: item.shelfLocation !== undefined ? (item.shelfLocation ? String(item.shelfLocation).trim() : null) : undefined,
+        });
+      }
+    } else {
+      const parsedCount = parseInt(count as string, 10);
+      if (isNaN(parsedCount) || parsedCount < 1 || parsedCount > 50) {
+        res.status(400).json({ error: 'Count must be an integer between 1 and 50.' });
+        return;
+      }
+
+      if (parsedCount > 1 && barcode) {
+        res.status(400).json({ error: 'Cannot specify a single barcode when adding multiple copies. Provide individual barcodes in a copies array or omit for auto-generation.' });
+        return;
+      }
+
+      if (condition && !allowedConditions.includes(condition)) {
+        res.status(400).json({ error: 'Invalid condition. Allowed: Good, Fair, Poor, Damaged.' });
+        return;
+      }
+
+      for (let i = 0; i < parsedCount; i++) {
+        copySpecs.push({
+          barcode: i === 0 && barcode ? String(barcode).trim() : null,
+          condition: condition || 'Good',
+          shelfLocation: shelfLocation !== undefined ? (shelfLocation ? String(shelfLocation).trim() : null) : undefined,
+        });
       }
     }
 
-    // Inventory count synchronization
-    const wasAvailable = copy.status === 'AVAILABLE';
-    const nowAvailable = (status || copy.status) === 'AVAILABLE';
+    // Check for duplicate barcodes within the request payload itself
+    const providedBarcodes = copySpecs.map((s) => s.barcode).filter((b): b is string => Boolean(b));
+    const barcodeSet = new Set(providedBarcodes);
+    if (barcodeSet.size !== providedBarcodes.length) {
+      res.status(409).json({ error: 'Duplicate barcodes supplied in request payload.' });
+      return;
+    }
 
-    let availableDelta = 0;
-    if (wasAvailable && !nowAvailable) availableDelta = -1;
-    if (!wasAvailable && nowAvailable) availableDelta = 1;
+    const createdCopies = await prisma.$transaction(async (tx) => {
+      // Advisory transaction lock on parent book to serialize copy number assignment & counter updates
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${req.params.id}`}))`;
+
+      const parentBook = await tx.book.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!parentBook) {
+        throw { status: 404, error: 'Book not found.' };
+      }
+
+      // Check external barcode collisions
+      if (providedBarcodes.length > 0) {
+        const existingBarcode = await tx.bookCopy.findFirst({
+          where: { barcode: { in: providedBarcodes } },
+        });
+        if (existingBarcode) {
+          throw { status: 409, error: `Barcode "${existingBarcode.barcode}" is already assigned to another book copy.` };
+        }
+      }
+
+      // Query current max copyNumber for this book
+      const maxCopy = await tx.bookCopy.findFirst({
+        where: { bookId: parentBook.id },
+        orderBy: { copyNumber: 'desc' },
+        select: { copyNumber: true },
+      });
+
+      let nextCopyNumber = (maxCopy?.copyNumber ?? 0) + 1;
+      const inserted: any[] = [];
+
+      for (const spec of copySpecs) {
+        const copyNum = nextCopyNumber++;
+        const resolvedBarcode = spec.barcode || `BC-${parentBook.id.slice(0, 8).toUpperCase()}-${copyNum}-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+        const resolvedShelf = spec.shelfLocation !== undefined ? spec.shelfLocation : (shelfLocation ? String(shelfLocation).trim() : parentBook.shelfLocation || null);
+
+        const newCopy = await tx.bookCopy.create({
+          data: {
+            bookId: parentBook.id,
+            copyNumber: copyNum,
+            condition: spec.condition || 'Good',
+            status: 'AVAILABLE',
+            barcode: resolvedBarcode,
+            shelfLocation: resolvedShelf,
+          },
+        });
+
+        inserted.push(newCopy);
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.BOOK_COPY_CREATED,
+          targetId: newCopy.id,
+          details: {
+            bookId: parentBook.id,
+            bookTitle: parentBook.title,
+            copyNumber: newCopy.copyNumber,
+            barcode: newCopy.barcode,
+            condition: newCopy.condition,
+            shelfLocation: newCopy.shelfLocation,
+          },
+          tx,
+        });
+      }
+
+      // Recalculate authoritative parent Book counters
+      const actual = await calculateActualBookCounts(parentBook.id, tx);
+      await tx.book.update({
+        where: { id: parentBook.id },
+        data: {
+          totalCopies: actual.totalCopies,
+          availableCopies: actual.availableCopies,
+        },
+      });
+
+      return inserted;
+    });
+
+    res.status(201).json({
+      copies: createdCopies,
+      message: `Successfully added ${createdCopies.length} physical copy/copies.`,
+    });
+  } catch (error: any) {
+    if (error?.status) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Create copies error:', error);
+    res.status(500).json({ error: 'Server error creating physical copies.' });
+  }
+});
+
+// PUT /api/books/copies/:copyId - Update physical book copy condition, status, and barcode (Librarian only)
+router.put('/copies/:copyId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { condition, status, barcode, shelfLocation, reactivate } = req.body;
+
+    const allowedConditions = ['Good', 'Fair', 'Poor', 'Damaged'];
+    const allowedStatuses = ['AVAILABLE', 'ISSUED', 'RESERVED', 'LOST', 'DAMAGED', 'WITHDRAWN'];
+
+    if (condition && !allowedConditions.includes(condition)) {
+      res.status(400).json({ error: `Invalid condition. Allowed: ${allowedConditions.join(', ')}.` });
+      return;
+    }
+
+    if (status && !allowedStatuses.includes(status)) {
+      res.status(400).json({ error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}.` });
+      return;
+    }
+
+    if (status === 'ISSUED') {
+      res.status(400).json({
+        error: 'Physical copies cannot be manually transitioned to ISSUED. Status must be updated through the lending approval/issue workflow.',
+      });
+      return;
+    }
 
     const updatedCopy = await prisma.$transaction(async (tx) => {
+      const copy = await tx.bookCopy.findUnique({
+        where: { id: req.params.copyId },
+        include: { book: true },
+      });
+
+      if (!copy) {
+        throw { status: 404, error: 'Book copy not found.' };
+      }
+
+      // Lock parent book to serialize inventory counter updates
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${copy.bookId}`}))`;
+
+      // Status transition checks
+      if (status && status !== copy.status) {
+        // Guard 1: An actively issued copy cannot be manually set to AVAILABLE or other statuses, bypassing return flow
+        if (copy.status === 'ISSUED') {
+          const activeLoan = await tx.lending.findFirst({
+            where: { bookCopyId: copy.id, status: 'ISSUED' },
+          });
+          if (activeLoan && status !== 'ISSUED') {
+            throw {
+              status: 400,
+              error: 'Cannot change the status of an actively issued copy. Process the return or resolve the active loan first.',
+            };
+          }
+        }
+
+        // Guard 2: A WITHDRAWN copy cannot be accidentally restored to AVAILABLE without explicit reactivate flag
+        if (copy.status === 'WITHDRAWN' && status === 'AVAILABLE' && !reactivate) {
+          throw {
+            status: 400,
+            error: 'Withdrawn copies cannot be directly restored to AVAILABLE without explicit reactivation confirmation (reactivate: true).',
+          };
+        }
+
+        // Guard 3: A LOST or DAMAGED copy cannot be restored to AVAILABLE without explicit reactivate flag and non-Damaged condition
+        if ((copy.status === 'LOST' || copy.status === 'DAMAGED') && status === 'AVAILABLE') {
+          if (!reactivate) {
+            throw {
+              status: 400,
+              error: 'Reactivating a LOST or DAMAGED copy to AVAILABLE requires explicit reactivation confirmation (reactivate: true).',
+            };
+          }
+          const effectiveCondition = condition || copy.condition;
+          if (effectiveCondition === 'Damaged') {
+            throw {
+              status: 400,
+              error: 'Cannot mark a damaged copy as AVAILABLE. Please repair or update the condition first.',
+            };
+          }
+        }
+      }
+
+      // Check barcode uniqueness if updating barcode
+      if (barcode !== undefined && barcode !== null && barcode !== '') {
+        const existingBarcode = await tx.bookCopy.findFirst({
+          where: { barcode, id: { not: copy.id } },
+        });
+        if (existingBarcode) {
+          throw { status: 409, error: 'Barcode is already assigned to another book copy.' };
+        }
+      }
+
+      const targetStatus = status || copy.status;
+
       const updated = await tx.bookCopy.update({
         where: { id: copy.id },
         data: {
           ...(condition && { condition }),
           ...(status && { status }),
-          barcode: barcode === '' ? null : barcode ?? undefined,
+          barcode: barcode === '' ? null : (barcode !== undefined ? barcode : undefined),
+          shelfLocation: shelfLocation === '' ? null : (shelfLocation !== undefined ? shelfLocation : undefined),
         },
       });
 
-      if (availableDelta !== 0) {
-        await tx.book.update({
-          where: { id: copy.bookId },
-          data: {
-            availableCopies: { increment: availableDelta },
-          },
-        });
+      // Recalculate authoritative parent Book counters
+      const actual = await calculateActualBookCounts(copy.bookId, tx);
+      await tx.book.update({
+        where: { id: copy.bookId },
+        data: {
+          totalCopies: actual.totalCopies,
+          availableCopies: actual.availableCopies,
+        },
+      });
+
+      let copyAuditAction: AuditAction = AUDIT_ACTIONS.BOOK_COPY_UPDATED;
+      if (targetStatus === 'LOST' && copy.status !== 'LOST') {
+        copyAuditAction = AUDIT_ACTIONS.BOOK_COPY_LOST;
+      } else if (targetStatus === 'DAMAGED' && copy.status !== 'DAMAGED') {
+        copyAuditAction = AUDIT_ACTIONS.BOOK_COPY_DAMAGED;
       }
 
       await logAdminAction({
         actorId: req.user!.id,
-        action: AUDIT_ACTIONS.BOOK_COPY_UPDATED,
+        action: copyAuditAction,
         targetId: copy.id,
         details: {
           bookId: copy.bookId,
+          bookTitle: copy.book.title,
+          copyNumber: copy.copyNumber,
           previousStatus: copy.status,
-          newStatus: status || copy.status,
+          newStatus: targetStatus,
           condition: condition || copy.condition,
           barcode: barcode === '' ? null : (barcode ?? copy.barcode),
+          shelfLocation: shelfLocation === '' ? null : (shelfLocation ?? copy.shelfLocation),
         },
         tx,
       });
+
+      if (copyAuditAction !== AUDIT_ACTIONS.BOOK_COPY_UPDATED) {
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.BOOK_COPY_UPDATED,
+          targetId: copy.id,
+          details: {
+            bookId: copy.bookId,
+            bookTitle: copy.book.title,
+            copyNumber: copy.copyNumber,
+            previousStatus: copy.status,
+            newStatus: targetStatus,
+            condition: condition || copy.condition,
+            barcode: barcode === '' ? null : (barcode ?? copy.barcode),
+            shelfLocation: shelfLocation === '' ? null : (shelfLocation ?? copy.shelfLocation),
+          },
+          tx,
+        });
+      }
 
       return updated;
     });
 
     res.json({ copy: updatedCopy, message: 'Book copy updated successfully.' });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
     console.error('Update book copy error:', error);
     res.status(500).json({ error: 'Server error updating book copy.' });
+  }
+});
+
+// DELETE /api/books/copies/:copyId - Delete or withdraw a physical book copy (Librarian only)
+router.delete('/copies/:copyId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const copy = await tx.bookCopy.findUnique({
+        where: { id: req.params.copyId },
+        include: { book: true },
+      });
+
+      if (!copy) {
+        throw { status: 404, error: 'Book copy not found.' };
+      }
+
+      // Advisory lock on parent book
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${copy.bookId}`}))`;
+
+      // Check if reserved
+      if (copy.status === 'RESERVED') {
+        throw {
+          status: 400,
+          error: 'Cannot remove a reserved copy. Unassign or cancel the reservation first.',
+        };
+      }
+
+      // Check if actively issued
+      const activeLoan = await tx.lending.findFirst({
+        where: { bookCopyId: copy.id, status: 'ISSUED' },
+      });
+
+      if (activeLoan || copy.status === 'ISSUED') {
+        throw {
+          status: 400,
+          error: 'Cannot remove an actively issued copy. Return or resolve the active lending first.',
+        };
+      }
+
+      // Check lending history
+      const lendingHistoryCount = await tx.lending.count({
+        where: { bookCopyId: copy.id },
+      });
+
+      if (lendingHistoryCount === 0) {
+        // Hard-delete: No lending history exists
+        await tx.bookCopy.delete({
+          where: { id: copy.id },
+        });
+
+        // Reconcile parent book counters from authoritative copies
+        const actual = await calculateActualBookCounts(copy.bookId, tx);
+        await tx.book.update({
+          where: { id: copy.bookId },
+          data: {
+            totalCopies: actual.totalCopies,
+            availableCopies: actual.availableCopies,
+          },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.BOOK_COPY_DELETED,
+          targetId: copy.id,
+          details: {
+            bookId: copy.bookId,
+            bookTitle: copy.book.title,
+            copyNumber: copy.copyNumber,
+            barcode: copy.barcode,
+            condition: copy.condition,
+            shelfLocation: copy.shelfLocation,
+          },
+          tx,
+        });
+
+        return {
+          action: 'DELETED',
+          message: 'Book copy permanently deleted.',
+          copyId: copy.id,
+        };
+      } else {
+        // Soft-delete: Has lending history, transition to WITHDRAWN
+        if (copy.status === 'WITHDRAWN') {
+          throw { status: 400, error: 'Book copy is already marked as WITHDRAWN.' };
+        }
+
+        const withdrawnCopy = await tx.bookCopy.update({
+          where: { id: copy.id },
+          data: { status: 'WITHDRAWN' },
+        });
+
+        // Reconcile parent book counters from authoritative copies
+        const actual = await calculateActualBookCounts(copy.bookId, tx);
+        await tx.book.update({
+          where: { id: copy.bookId },
+          data: {
+            totalCopies: actual.totalCopies,
+            availableCopies: actual.availableCopies,
+          },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.BOOK_COPY_WITHDRAWN,
+          targetId: copy.id,
+          details: {
+            bookId: copy.bookId,
+            bookTitle: copy.book.title,
+            copyNumber: copy.copyNumber,
+            barcode: copy.barcode,
+            lendingHistoryCount,
+            previousStatus: copy.status,
+          },
+          tx,
+        });
+
+        return {
+          action: 'WITHDRAWN',
+          message: 'Book copy has historical lending records and has been withdrawn from circulation.',
+          copy: withdrawnCopy,
+        };
+      }
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    if (error?.status) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Delete copy error:', error);
+    res.status(500).json({ error: 'Server error removing book copy.' });
   }
 });
 

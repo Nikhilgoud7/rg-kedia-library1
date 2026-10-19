@@ -7,7 +7,8 @@ import {
   RENEWAL_DAYS,
   MAX_RENEWALS,
 } from '../lib/lendingPolicy.js';
-import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
+import { logAdminAction, AUDIT_ACTIONS, AuditAction } from '../lib/auditLogger.js';
+import { calculateActualBookCounts } from '../lib/inventoryReconciliation.js';
 
 const router = Router();
 
@@ -472,9 +473,35 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
   }
 });
 
-// POST /api/lending/return/:lendingId - Librarian marks book as returned
+// POST /api/lending/return/:lendingId - Librarian marks book as returned, damaged, or lost
 router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const { resolution = 'RETURNED', condition, notes } = req.body || {};
+
+    const allowedResolutions = ['RETURNED', 'DAMAGED', 'LOST'];
+    if (!allowedResolutions.includes(resolution)) {
+      res.status(400).json({ error: `Invalid resolution. Allowed: ${allowedResolutions.join(', ')}.` });
+      return;
+    }
+
+    const allowedConditions = ['Good', 'Fair', 'Poor', 'Damaged'];
+    if (condition !== undefined && condition !== null && condition !== '' && !allowedConditions.includes(condition)) {
+      res.status(400).json({ error: `Invalid condition. Allowed: ${allowedConditions.join(', ')}.` });
+      return;
+    }
+
+    if (notes !== undefined && notes !== null) {
+      if (typeof notes !== 'string') {
+        res.status(400).json({ error: 'Notes must be a string.' });
+        return;
+      }
+      if (notes.length > 500) {
+        res.status(400).json({ error: 'Notes cannot exceed 500 characters.' });
+        return;
+      }
+    }
+    const cleanNotes = typeof notes === 'string' && notes.trim().length > 0 ? notes.trim() : null;
+
     const now = new Date();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -490,41 +517,86 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         throw { status: 404, error: 'Active lending not found.' };
       }
 
+      if (lending.status !== 'ISSUED') {
+        throw { status: 409, error: 'Book has already been returned or resolved.' };
+      }
+
+      // PostgreSQL advisory transaction lock on the parent book record
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${lending.bookCopy.bookId}`}))`;
+
       let daysOverdue = 0;
       if (now > lending.dueDate) {
         daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
       }
 
+      // Claim lending atomically
       const claimedLending = await tx.lending.updateMany({
         where: { id: lending.id, status: 'ISSUED' },
-        data: { status: 'RETURNED', returnedDate: now, fine: 0 },
+        data: {
+          status: 'RETURNED',
+          returnedDate: now,
+          fine: 0,
+          notes: cleanNotes || lending.notes || null,
+        },
       });
 
       if (claimedLending.count === 0) {
-        throw { status: 409, error: 'Lending already returned.' };
+        throw { status: 409, error: 'Lending already returned or resolved.' };
       }
 
-      await tx.bookCopy.updateMany({
-        where: { id: lending.bookCopyId, status: 'ISSUED' },
-        data: { status: 'AVAILABLE' },
+      // Determine copy status and condition based on resolution
+      let targetCopyStatus = 'AVAILABLE';
+      let targetCondition = lending.bookCopy.condition;
+
+      if (resolution === 'LOST') {
+        targetCopyStatus = 'LOST';
+      } else if (resolution === 'DAMAGED') {
+        targetCopyStatus = 'DAMAGED';
+        targetCondition = condition || 'Damaged';
+      } else {
+        // Normal RETURNED
+        targetCopyStatus = 'AVAILABLE';
+        if (condition) {
+          targetCondition = condition;
+        }
+      }
+
+      const updatedCopy = await tx.bookCopy.update({
+        where: { id: lending.bookCopyId },
+        data: {
+          status: targetCopyStatus,
+          condition: targetCondition,
+        },
       });
 
-      const totalCopies = lending.bookCopy.book.totalCopies;
-      const bookClaim = await tx.book.updateMany({
-        where: { id: lending.bookCopy.bookId, availableCopies: { lt: totalCopies } },
-        data: { availableCopies: { increment: 1 } },
+      // Authoritative parent book counter recalculation
+      const actual = await calculateActualBookCounts(lending.bookCopy.bookId, tx);
+      await tx.book.update({
+        where: { id: lending.bookCopy.bookId },
+        data: {
+          totalCopies: actual.totalCopies,
+          availableCopies: actual.availableCopies,
+        },
       });
 
-      if (bookClaim.count === 0) {
-        console.warn(`Book ${lending.bookCopy.bookId} availableCopies increment guarded: already at totalCopies (${totalCopies})`);
+      // Borrower notification with explicit zero-fine policy
+      let notificationTitle = 'Book Returned';
+      let notificationMessage = `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`;
+
+      if (resolution === 'LOST') {
+        notificationTitle = 'Book Reported Lost';
+        notificationMessage = `"${lending.bookCopy.book.title}" has been recorded as lost. Under college policy, no monetary fines are assessed.`;
+      } else if (resolution === 'DAMAGED') {
+        notificationTitle = 'Book Returned Damaged';
+        notificationMessage = `"${lending.bookCopy.book.title}" has been returned in damaged condition and scheduled for assessment. Under college policy, no monetary fines are assessed.`;
       }
 
       await tx.notification.create({
         data: {
           userId: lending.userId,
-          title: 'Book Returned',
-          message: `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`,
-          type: 'INFO',
+          title: notificationTitle,
+          message: notificationMessage,
+          type: resolution === 'RETURNED' ? 'INFO' : 'WARNING',
           link: lending.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
         },
       });
@@ -540,31 +612,53 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
         data: { status: 'APPROVED' },
       });
 
+      // Transactional Audit Logging
+      let auditAction: AuditAction = AUDIT_ACTIONS.LENDING_RETURNED;
+      if (resolution === 'LOST') {
+        auditAction = AUDIT_ACTIONS.BOOK_COPY_LOST;
+      } else if (resolution === 'DAMAGED') {
+        auditAction = AUDIT_ACTIONS.BOOK_COPY_DAMAGED;
+      }
+
       await logAdminAction({
         actorId: req.user!.id,
-        action: AUDIT_ACTIONS.LENDING_RETURNED,
-        targetId: lending.id,
+        action: auditAction,
+        targetId: resolution === 'RETURNED' ? lending.id : lending.bookCopyId,
         details: {
           lendingId: lending.id,
           bookId: lending.bookCopy.bookId,
           bookTitle: lending.bookCopy.book.title,
           copyId: lending.bookCopyId,
+          copyNumber: lending.bookCopy.copyNumber,
           userId: lending.userId,
           borrowerName: lending.user.name,
           borrowerRollNumber: lending.user.rollNumber,
+          resolution,
+          condition: targetCondition,
+          notes: cleanNotes || null,
           daysOverdue,
           fine: 0,
         },
         tx,
       });
 
-      return { daysOverdue };
+      return { daysOverdue, resolution, updatedCopy };
     }, { maxWait: 10000, timeout: 30000 });
 
+    let successMessage = 'Book returned successfully.';
+    if (result.resolution === 'LOST') {
+      successMessage = 'Book loan settled as lost. Zero fine assessed.';
+    } else if (result.resolution === 'DAMAGED') {
+      successMessage = 'Book returned in damaged condition. Zero fine assessed.';
+    }
+
     res.json({
-      message: 'Book returned successfully.',
+      message: successMessage,
       fine: 0,
       fineMessage: null,
+      resolution: result.resolution,
+      copyStatus: result.updatedCopy.status,
+      copy: result.updatedCopy,
     });
   } catch (error: any) {
     if (error && error.status && error.error) {

@@ -14,6 +14,7 @@ import {
   BookOpen,
   User,
   ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -33,6 +34,9 @@ export const IssuedBooks: React.FC = () => {
   const [selectedReturnLending, setSelectedReturnLending] = useState<Lending | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isProcessingReturn, setIsProcessingReturn] = useState(false);
+  const [returnResolution, setReturnResolution] = useState<'RETURNED' | 'DAMAGED' | 'LOST'>('RETURNED');
+  const [returnCondition, setReturnCondition] = useState('Damaged');
+  const [returnNotes, setReturnNotes] = useState('');
 
   const fetchLendings = useCallback(async () => {
     try {
@@ -77,10 +81,25 @@ export const IssuedBooks: React.FC = () => {
     if (!selectedReturnLending) return;
     try {
       setIsProcessingReturn(true);
-      await api.post(`/lending/return/${selectedReturnLending.id}`);
-      toast.success(
-        `Book "${selectedReturnLending.bookCopy?.book?.title}" returned and copy marked AVAILABLE!`
-      );
+      const payload: any = {
+        resolution: returnResolution,
+      };
+      if (returnResolution === 'DAMAGED') {
+        payload.condition = returnCondition;
+      }
+      if (returnNotes.trim()) {
+        payload.notes = returnNotes.trim();
+      }
+      await api.post(`/lending/return/${selectedReturnLending.id}`, payload);
+
+      const title = selectedReturnLending.bookCopy?.book?.title || 'Book';
+      if (returnResolution === 'LOST') {
+        toast.success(`Book "${title}" recorded as LOST (Zero fine applied).`);
+      } else if (returnResolution === 'DAMAGED') {
+        toast.success(`Book "${title}" recorded as DAMAGED (Zero fine applied).`);
+      } else {
+        toast.success(`Book "${title}" returned and copy marked AVAILABLE!`);
+      }
       setIsReturnModalOpen(false);
       setSelectedReturnLending(null);
       fetchLendings();
@@ -256,6 +275,9 @@ export const IssuedBooks: React.FC = () => {
                         <button
                           onClick={() => {
                             setSelectedReturnLending(l);
+                            setReturnResolution('RETURNED');
+                            setReturnCondition('Damaged');
+                            setReturnNotes('');
                             setIsReturnModalOpen(true);
                           }}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl font-extrabold text-xs transition shadow-xs inline-flex items-center gap-1"
@@ -312,7 +334,13 @@ export const IssuedBooks: React.FC = () => {
           setIsReturnModalOpen(false);
           setSelectedReturnLending(null);
         }}
-        title="Confirm Book Return"
+        title={
+          returnResolution === 'RETURNED'
+            ? 'Process Book Return'
+            : returnResolution === 'DAMAGED'
+            ? 'Settle as Damaged Book'
+            : 'Settle as Lost Book'
+        }
         maxWidth="md"
       >
         {selectedReturnLending && (
@@ -348,13 +376,107 @@ export const IssuedBooks: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                Processing this return will restore the physical copy to <strong>AVAILABLE</strong>{' '}
-                and safely increment catalog inventory.
-              </span>
+            {/* Resolution Selector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Return Resolution
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnResolution('RETURNED')}
+                  className={`p-2.5 rounded-xl border text-center transition font-bold flex flex-col items-center gap-1 ${
+                    returnResolution === 'RETURNED'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <RotateCcw className="w-4 h-4 text-emerald-600" />
+                  <span>Normal Return</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReturnResolution('DAMAGED')}
+                  className={`p-2.5 rounded-xl border text-center transition font-bold flex flex-col items-center gap-1 ${
+                    returnResolution === 'DAMAGED'
+                      ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>Mark Damaged</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReturnResolution('LOST')}
+                  className={`p-2.5 rounded-xl border text-center transition font-bold flex flex-col items-center gap-1 ${
+                    returnResolution === 'LOST'
+                      ? 'bg-red-50 border-red-500 text-red-800 ring-2 ring-red-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span>Mark Lost</span>
+                </button>
+              </div>
             </div>
+
+            {/* Condition selector if damaged */}
+            {returnResolution === 'DAMAGED' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Condition Rating
+                </label>
+                <select
+                  value={returnCondition}
+                  onChange={(e) => setReturnCondition(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                >
+                  <option value="Damaged">Damaged (Requires repair/evaluation)</option>
+                  <option value="Poor">Poor (Significant wear/damage)</option>
+                  <option value="Fair">Fair (Noticeable wear)</option>
+                  <option value="Good">Good (Minor wear)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Settlement Notes (Optional)
+              </label>
+              <textarea
+                value={returnNotes}
+                onChange={(e) => setReturnNotes(e.target.value)}
+                placeholder="Reason or notes (e.g., water damage on pages 10-25, reported lost during transit)..."
+                maxLength={500}
+                rows={2}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+              />
+            </div>
+
+            {/* Status / Policy Notice */}
+            {returnResolution === 'RETURNED' ? (
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Processing this return will restore the physical copy to <strong>AVAILABLE</strong>{' '}
+                  and safely increment catalog inventory.
+                </span>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Zero-Fine Policy Applied</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Under college policy, no monetary fines are assessed for lost or damaged books.
+                  This will settle the loan record and mark the physical copy as{' '}
+                  <strong>{returnResolution}</strong>.
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
@@ -371,10 +493,22 @@ export const IssuedBooks: React.FC = () => {
               <button
                 type="submit"
                 disabled={isProcessingReturn}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition shadow-xs flex items-center gap-1.5"
+                className={`px-4 py-2 text-white rounded-xl font-bold transition shadow-xs flex items-center gap-1.5 ${
+                  returnResolution === 'RETURNED'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : returnResolution === 'DAMAGED'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
               >
                 <Check className="w-4 h-4" />
-                {isProcessingReturn ? 'Processing...' : 'Confirm Return'}
+                {isProcessingReturn
+                  ? 'Processing...'
+                  : returnResolution === 'RETURNED'
+                  ? 'Confirm Return'
+                  : returnResolution === 'DAMAGED'
+                  ? 'Confirm Damaged Return'
+                  : 'Confirm Lost Settlement'}
               </button>
             </div>
           </form>

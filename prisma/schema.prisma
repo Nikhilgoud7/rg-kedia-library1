@@ -79,12 +79,13 @@ model BookProgram {
 
 // Individual physical copies of a book
 model BookCopy {
-  id         String @id @default(uuid())
-  bookId     String
-  copyNumber Int
-  condition  String @default("Good") // Good | Fair | Poor | Damaged
-  status     String @default("AVAILABLE") // AVAILABLE | ISSUED | RESERVED | LOST | DAMAGED
-  barcode    String? @unique
+  id            String  @id @default(uuid())
+  bookId        String
+  copyNumber    Int
+  condition     String  @default("Good") // Good | Fair | Poor | Damaged
+  status        String  @default("AVAILABLE") // AVAILABLE | ISSUED | RESERVED | LOST | DAMAGED | WITHDRAWN
+  barcode       String? @unique
+  shelfLocation String?
 
   book     Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
   lendings Lending[]
@@ -169,7 +170,7 @@ model Notification {
 model AuditLog {
   id        String   @id @default(uuid())
   actorId   String
-  action    String   // USER_CREATED | USER_UPDATED | USER_DEACTIVATED | USER_ACTIVATED | PASSWORD_RESET | USER_DELETED | BOOK_CREATED | BOOK_UPDATED | BOOK_DELETED | BOOK_COPY_UPDATED
+  action    String   // USER_CREATED | USER_UPDATED | USER_DEACTIVATED | USER_ACTIVATED | PASSWORD_RESET | USER_DELETED | BOOK_CREATED | BOOK_UPDATED | BOOK_DELETED | BOOK_COPY_UPDATED | BOOK_COPY_CREATED | BOOK_COPY_DELETED | BOOK_COPY_LOST | BOOK_COPY_DAMAGED | BOOK_COPY_WITHDRAWN
   targetId  String?
   details   String?
   timestamp DateTime @default(now())

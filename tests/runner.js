@@ -12,6 +12,9 @@ import { runUserHardeningTests } from './suites/userHardening.test.js';
 import { runLendingQueueTests } from './suites/lendingQueue.test.js';
 import { runExamGuideTests } from './suites/examGuide.test.js';
 import { runLibrarianPolishTests } from './suites/librarianPolish.test.js';
+import { runCopyManagementTests } from './suites/copyManagement.test.js';
+import { runInventoryReconciliationTests } from './suites/inventoryReconciliation.test.js';
+import { runLostDamagedTests } from './suites/lostDamaged.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -25,6 +28,9 @@ const SUITES = {
   lendingQueue: { name: 'Lending Requests & Issued Books Queue Suite (Phase 5D)', fn: runLendingQueueTests },
   examGuide: { name: 'Exam Guide & Academic Material Manager Suite (Phase 5E)', fn: runExamGuideTests },
   librarianPolish: { name: 'Librarian UX Polish & Governance Suite (Phase 5F)', fn: runLibrarianPolishTests },
+  copyManagement: { name: 'Physical Copy Management APIs Suite (Phase 6B)', fn: runCopyManagementTests },
+  inventoryReconciliation: { name: 'Inventory Reconciliation & Consistency Engine Suite (Phase 6C)', fn: runInventoryReconciliationTests },
+  lostDamaged: { name: 'Zero-Fine Lost & Damaged Workflows Suite (Phase 6D)', fn: runLostDamagedTests },
 };
 
 async function checkHealth(url) {
