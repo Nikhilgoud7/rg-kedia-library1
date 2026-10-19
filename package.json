@@ -34,7 +34,8 @@
     "test:librarian-polish": "node tests/runner.js --allow-tests --suite=librarianPolish",
     "test:copy-management": "node tests/runner.js --allow-tests --suite=copyManagement",
     "test:reconciliation": "node tests/runner.js --allow-tests --suite=inventoryReconciliation",
-    "test:lost-damaged": "node tests/runner.js --allow-tests --suite=lostDamaged"
+    "test:lost-damaged": "node tests/runner.js --allow-tests --suite=lostDamaged",
+    "test:inventory-experience": "node tests/runner.js --allow-tests --suite=inventoryExperience"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

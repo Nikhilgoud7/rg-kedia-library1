@@ -15,6 +15,12 @@ import {
   AlertCircle,
   FileQuestion,
   X,
+  RotateCcw,
+  AlertTriangle,
+  ShieldAlert,
+  CheckCircle,
+  PackagePlus,
+  MinusCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -43,6 +49,43 @@ export const ManageBooks: React.FC = () => {
   const [bookToDelete, setBookToDelete] = useState<{ id: string; title: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reconciliation State
+  const [reconcilingBookId, setReconcilingBookId] = useState<string | null>(null);
+
+  // Handle single-book inventory reconciliation
+  const handleReconcileBook = async (bookId: string, bookTitle: string) => {
+    try {
+      setReconcilingBookId(bookId);
+      const res = await api.post(`/books/${bookId}/reconcile`);
+      const result = res.data?.result;
+      if (result) {
+        if (result.reconciled) {
+          toast.success(
+            `Reconciliation complete for "${bookTitle}": Corrected drift! Total: ${result.previousTotalCopies} → ${result.correctedTotalCopies}, Available: ${result.previousAvailableCopies} → ${result.correctedAvailableCopies}.`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.success(
+            `Inventory consistent for "${bookTitle}": No drift detected (${result.correctedAvailableCopies} available / ${result.correctedTotalCopies} total).`,
+            { icon: '✅' }
+          );
+        }
+      } else {
+        toast.success(res.data?.message || 'Inventory reconciliation completed.');
+      }
+      fetchBooks(page);
+      if (selectedBookForCopies && selectedBookForCopies.id === bookId) {
+        const refreshed = await api.get(`/books/${bookId}`);
+        setSelectedBookForCopies(refreshed.data.book);
+      }
+    } catch (err: any) {
+      console.error('Reconciliation error:', err);
+      toast.error(err.response?.data?.error || 'Failed to reconcile book inventory.');
+    } finally {
+      setReconcilingBookId(null);
+    }
+  };
 
   // Form State (Add)
   const [formData, setFormData] = useState({
@@ -470,6 +513,15 @@ export const ManageBooks: React.FC = () => {
                           <span>Copies ({b.totalCopies})</span>
                         </button>
                         <button
+                          onClick={() => handleReconcileBook(b.id, b.title)}
+                          disabled={reconcilingBookId === b.id}
+                          title="Reconcile Inventory Stock"
+                          aria-label={`Reconcile inventory stock for ${b.title}`}
+                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition disabled:opacity-40"
+                        >
+                          <RotateCcw className={`w-4 h-4 ${reconcilingBookId === b.id ? 'animate-spin text-emerald-600' : ''}`} />
+                        </button>
+                        <button
                           onClick={() => setBookToDelete({ id: b.id, title: b.title })}
                           title="Delete book"
                           aria-label={`Delete book ${b.title}`}
@@ -873,94 +925,470 @@ export const ManageBooks: React.FC = () => {
 
       {/* Physical Copies Management Modal */}
       {selectedBookForCopies && (
-        <Modal
+        <CopiesModal
+          book={selectedBookForCopies}
           isOpen={isCopiesModalOpen}
           onClose={() => {
             setIsCopiesModalOpen(false);
             setSelectedBookForCopies(null);
           }}
-          title={`Physical Copies — ${selectedBookForCopies.title}`}
-          maxWidth="3xl"
-        >
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-slate-700 font-semibold">
-              <div>
-                Author: <span className="font-bold">{selectedBookForCopies.author}</span>
-              </div>
-              <div>
-                Available Copies: <span className="font-extrabold text-emerald-600">{selectedBookForCopies.availableCopies}</span> / {selectedBookForCopies.totalCopies}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden" aria-label="Book physical copies">
-                <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
-                  <tr>
-                    <th scope="col" className="p-2.5">Copy #</th>
-                    <th scope="col" className="p-2.5">Barcode</th>
-                    <th scope="col" className="p-2.5">Condition</th>
-                    <th scope="col" className="p-2.5">Status</th>
-                    <th scope="col" className="p-2.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {selectedBookForCopies.copies?.map((copy: any) => (
-                    <CopyRow
-                      key={copy.id}
-                      copy={copy}
-                      bookId={selectedBookForCopies.id}
-                      onUpdated={async () => {
-                        fetchBooks(page);
-                        const refreshed = await api.get(`/books/${selectedBookForCopies.id}`);
-                        setSelectedBookForCopies(refreshed.data.book);
-                      }}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCopiesModalOpen(false);
-                  setSelectedBookForCopies(null);
-                }}
-                className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </Modal>
+          onBookUpdated={async () => {
+            fetchBooks(page);
+            try {
+              const refreshed = await api.get(`/books/${selectedBookForCopies.id}`);
+              setSelectedBookForCopies(refreshed.data.book);
+            } catch (err) {
+              console.error('Failed to refresh selected book:', err);
+            }
+          }}
+          onReconcile={() => handleReconcileBook(selectedBookForCopies.id, selectedBookForCopies.title)}
+          isReconciling={reconcilingBookId === selectedBookForCopies.id}
+        />
       )}
     </div>
   );
 };
 
-/** Row component for editing an individual physical copy */
+/** CopiesModal component for viewing, adding, editing, withdrawing, and reconciling physical copies */
+const CopiesModal: React.FC<{
+  book: any;
+  isOpen: boolean;
+  onClose: () => void;
+  onBookUpdated: () => Promise<void>;
+  onReconcile: () => void;
+  isReconciling: boolean;
+}> = ({ book, isOpen, onClose, onBookUpdated, onReconcile, isReconciling }) => {
+  // Add Copies form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addCount, setAddCount] = useState(1);
+  const [addCondition, setAddCondition] = useState('Good');
+  const [addShelfLocation, setAddShelfLocation] = useState(book.shelfLocation || 'Rack A-1');
+  const [addBarcodePrefix, setAddBarcodePrefix] = useState('');
+  const [isAddingCopies, setIsAddingCopies] = useState(false);
+
+  // Copy to Delete state
+  const [copyToDelete, setCopyToDelete] = useState<any | null>(null);
+  const [isDeletingCopy, setIsDeletingCopy] = useState(false);
+
+  // Copy to Reactivate state
+  const [copyToReactivate, setCopyToReactivate] = useState<any | null>(null);
+  const [isReactivating, setIsReactivating] = useState(false);
+
+  const handleAddCopies = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (addCount < 1 || addCount > 50) {
+      toast.error('Number of copies must be between 1 and 50.');
+      return;
+    }
+
+    try {
+      setIsAddingCopies(true);
+      const payload: any = {
+        count: addCount,
+        condition: addCondition,
+        shelfLocation: addShelfLocation.trim() || null,
+      };
+
+      if (addCount === 1 && addBarcodePrefix.trim()) {
+        payload.barcode = addBarcodePrefix.trim();
+      }
+
+      const res = await api.post(`/books/${book.id}/copies`, payload);
+      toast.success(res.data?.message || `Successfully added ${addCount} physical copy/copies!`);
+      setShowAddForm(false);
+      setAddCount(1);
+      setAddBarcodePrefix('');
+      await onBookUpdated();
+    } catch (err: any) {
+      console.error('Add copies error:', err);
+      toast.error(err.response?.data?.error || 'Failed to add physical copies.');
+    } finally {
+      setIsAddingCopies(false);
+    }
+  };
+
+  const confirmDeleteOrWithdrawCopy = async () => {
+    if (!copyToDelete) return;
+    try {
+      setIsDeletingCopy(true);
+      const res = await api.delete(`/books/copies/${copyToDelete.id}`);
+      if (res.data?.action === 'WITHDRAWN') {
+        toast.success(`Copy #${copyToDelete.copyNumber} retained with lending history and marked as WITHDRAWN.`);
+      } else {
+        toast.success(`Copy #${copyToDelete.copyNumber} permanently deleted.`);
+      }
+      setCopyToDelete(null);
+      await onBookUpdated();
+    } catch (err: any) {
+      console.error('Delete copy error:', err);
+      toast.error(err.response?.data?.error || 'Failed to remove physical copy.');
+    } finally {
+      setIsDeletingCopy(false);
+    }
+  };
+
+  const confirmReactivateCopy = async () => {
+    if (!copyToReactivate) return;
+    try {
+      setIsReactivating(true);
+      const res = await api.put(`/books/copies/${copyToReactivate.id}`, {
+        status: 'AVAILABLE',
+        condition: copyToReactivate.targetCondition || 'Good',
+        shelfLocation: copyToReactivate.shelfLocation || null,
+        reactivate: true,
+      });
+      toast.success(res.data?.message || `Copy #${copyToReactivate.copyNumber} restored to AVAILABLE stock!`);
+      setCopyToReactivate(null);
+      await onBookUpdated();
+    } catch (err: any) {
+      console.error('Reactivate copy error:', err);
+      toast.error(err.response?.data?.error || 'Failed to reactivate book copy.');
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  return (
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={`Physical Inventory — ${book.title}`}
+        maxWidth="3xl"
+      >
+        <div className="space-y-4 text-xs">
+          {/* Top Metadata & Summary Banner */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-slate-700">
+            <div>
+              <span className="text-slate-500">Author:</span> <span className="font-bold text-slate-900">{book.author}</span>
+              {book.isbn && (
+                <span className="ml-3 text-slate-500 font-mono text-[11px]">ISBN: {book.isbn}</span>
+              )}
+              {book.shelfLocation && (
+                <span className="ml-3 inline-flex items-center gap-1 font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px]">
+                  <MapPin className="w-3 h-3 text-amber-500" />
+                  Default Shelf: {book.shelfLocation}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-right">
+                <span className="text-[10px] text-slate-400 block font-bold uppercase">Stock Status</span>
+                <span className="font-black text-sm text-emerald-600">{book.availableCopies}</span>
+                <span className="text-slate-400 font-semibold"> / {book.totalCopies} Available</span>
+              </div>
+              <button
+                onClick={onReconcile}
+                disabled={isReconciling}
+                title="Reconcile inventory stock with physical copies"
+                aria-label={`Reconcile physical stock for ${book.title}`}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-emerald-600 ${isReconciling ? 'animate-spin' : ''}`} />
+                <span>{isReconciling ? 'Checking...' : 'Reconcile Stock'}</span>
+              </button>
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl transition shadow-xs flex items-center gap-1.5"
+                aria-label="Toggle add copies form"
+              >
+                <PackagePlus className="w-3.5 h-3.5" />
+                <span>{showAddForm ? 'Close Add Form' : 'Add Copies'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-form: Add Physical Copies */}
+          {showAddForm && (
+            <form onSubmit={handleAddCopies} className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                <div className="flex items-center gap-1.5 font-black text-amber-950 text-xs">
+                  <PackagePlus className="w-4 h-4 text-amber-600" />
+                  <span>Add Physical Library Copies (1 to 50)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="text-amber-800 hover:text-amber-950 p-1 rounded-md"
+                  aria-label="Cancel adding copies"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Number of Copies *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    required
+                    value={addCount}
+                    onChange={(e) => setAddCount(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">Between 1 and 50</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Condition *</label>
+                  <select
+                    value={addCondition}
+                    onChange={(e) => setAddCondition(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                  >
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                    <option value="Poor">Poor</option>
+                    <option value="Damaged">Damaged</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Copy Shelf Location</label>
+                  <input
+                    type="text"
+                    value={addShelfLocation}
+                    onChange={(e) => setAddShelfLocation(e.target.value)}
+                    placeholder="e.g. Rack A-1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    {addCount === 1 ? 'Barcode (Optional)' : 'Barcode'}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={addCount > 1}
+                    value={addCount > 1 ? '(Auto-generated sequentially)' : addBarcodePrefix}
+                    onChange={(e) => setAddBarcodePrefix(e.target.value)}
+                    placeholder="e.g. BC-1005"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                  {addCount > 1 && (
+                    <span className="text-[10px] text-slate-400">Sequential barcodes assigned automatically</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingCopies}
+                  className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold shadow-xs transition disabled:opacity-50"
+                >
+                  {isAddingCopies ? 'Adding Copies...' : `Confirm & Add ${addCount} Copy/Copies`}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Physical Copies Table */}
+          <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-xs" aria-label="Book physical copies">
+              <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200 sticky top-0 z-10">
+                <tr>
+                  <th scope="col" className="p-2.5">Copy #</th>
+                  <th scope="col" className="p-2.5">Barcode</th>
+                  <th scope="col" className="p-2.5">Condition</th>
+                  <th scope="col" className="p-2.5">Status</th>
+                  <th scope="col" className="p-2.5">Shelf Location</th>
+                  <th scope="col" className="p-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {book.copies && book.copies.length > 0 ? (
+                  book.copies.map((copy: any) => (
+                    <CopyRow
+                      key={copy.id}
+                      copy={copy}
+                      bookId={book.id}
+                      onUpdated={onBookUpdated}
+                      onDeleteClick={() => setCopyToDelete(copy)}
+                      onReactivateClick={(targetCond) => setCopyToReactivate({ ...copy, targetCondition: targetCond })}
+                    />
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                      No physical copies found for this title. Use "Add Copies" above to generate stock.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-slate-500 text-[11px]">
+            <span>
+              Total non-withdrawn copies count towards institutional assets. Actively issued copies cannot be removed or directly updated.
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Copy Deletion / Withdrawal Confirmation Modal */}
+      {copyToDelete && (
+        <Modal
+          isOpen={true}
+          onClose={() => setCopyToDelete(null)}
+          title={`Confirm Removal — Copy #${copyToDelete.copyNumber}`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-950">Remove physical copy #{copyToDelete.copyNumber}?</p>
+                <p className="text-amber-800 mt-1 font-mono text-[11px]">
+                  Barcode: {copyToDelete.barcode || 'None'} | Current Status: {copyToDelete.status}
+                </p>
+                <div className="text-amber-900/90 mt-2 text-[11px] space-y-1 leading-relaxed">
+                  <p>
+                    • If this copy has <strong>no historical lending records</strong>, it will be <strong>permanently deleted</strong> from the library database.
+                  </p>
+                  <p>
+                    • If this copy has <strong>past lending history</strong>, institutional audit rules will retain the audit history and mark its status as <strong>WITHDRAWN</strong>.
+                  </p>
+                  <p className="font-semibold text-red-700">
+                    • Actively issued copies cannot be removed. You must resolve the active loan first.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCopyToDelete(null)}
+                disabled={isDeletingCopy}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteOrWithdrawCopy}
+                disabled={isDeletingCopy}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-xs disabled:opacity-50"
+              >
+                {isDeletingCopy ? 'Processing...' : 'Confirm Removal'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reactivation Confirmation Modal */}
+      {copyToReactivate && (
+        <Modal
+          isOpen={true}
+          onClose={() => setCopyToReactivate(null)}
+          title={`Reactivate Copy #${copyToReactivate.copyNumber} to AVAILABLE`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-emerald-950">
+                  Restore Copy #{copyToReactivate.copyNumber} to Available Inventory?
+                </p>
+                <p className="text-emerald-800 mt-1 text-[11px] leading-relaxed">
+                  This physical copy was previously recorded as <strong>{copyToReactivate.status}</strong>.
+                  Confirming reactivation will return it to active circulating stock with condition <strong>{copyToReactivate.targetCondition || 'Good'}</strong>.
+                </p>
+                <p className="text-emerald-700 mt-2 text-[10px] font-semibold">
+                  Authoritative inventory counters will increment available stock accordingly.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCopyToReactivate(null)}
+                disabled={isReactivating}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReactivateCopy}
+                disabled={isReactivating}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition shadow-xs disabled:opacity-50"
+              >
+                {isReactivating ? 'Reactivating...' : 'Confirm Reactivation'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+};
+
+/** Row component for editing and managing an individual physical copy */
 const CopyRow: React.FC<{
   copy: any;
   bookId: string;
-  onUpdated: () => void;
-}> = ({ copy, onUpdated }) => {
+  onUpdated: () => Promise<void>;
+  onDeleteClick: () => void;
+  onReactivateClick: (targetCond: string) => void;
+}> = ({ copy, onUpdated, onDeleteClick, onReactivateClick }) => {
   const [condition, setCondition] = useState(copy.condition || 'Good');
   const [status, setStatus] = useState(copy.status || 'AVAILABLE');
   const [barcode, setBarcode] = useState(copy.barcode || '');
+  const [shelfLocation, setShelfLocation] = useState(copy.shelfLocation || '');
   const [saving, setSaving] = useState(false);
 
+  const isIssued = copy.status === 'ISSUED';
+  const isWithdrawn = copy.status === 'WITHDRAWN';
+  const isLostOrDamaged = copy.status === 'LOST' || copy.status === 'DAMAGED';
+
   const handleSave = async () => {
+    // Check if transitioning from LOST/DAMAGED/WITHDRAWN to AVAILABLE
+    if ((isLostOrDamaged || isWithdrawn) && status === 'AVAILABLE') {
+      if (condition === 'Damaged') {
+        toast.error('Cannot reactivate a copy with condition "Damaged". Please repair or select Good/Fair/Poor condition.');
+        return;
+      }
+      // Trigger confirmation dialog
+      onReactivateClick(condition);
+      return;
+    }
+
     try {
       setSaving(true);
       await api.put(`/books/copies/${copy.id}`, {
         condition,
         status,
-        barcode,
+        barcode: barcode.trim() || null,
+        shelfLocation: shelfLocation.trim() || null,
       });
       toast.success(`Copy #${copy.copyNumber} updated successfully!`);
-      onUpdated();
+      await onUpdated();
     } catch (err: any) {
+      console.error('Update copy error:', err);
       toast.error(err.response?.data?.error || 'Failed to update copy');
     } finally {
       setSaving(false);
@@ -968,15 +1396,22 @@ const CopyRow: React.FC<{
   };
 
   return (
-    <tr className="hover:bg-slate-50">
-      <td className="p-2.5 font-bold text-slate-900">Copy #{copy.copyNumber}</td>
+    <tr className="hover:bg-slate-50 transition">
+      <td className="p-2.5 font-bold text-slate-900 whitespace-nowrap">
+        Copy #{copy.copyNumber}
+        {isIssued && (
+          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+            On Loan
+          </span>
+        )}
+      </td>
       <td className="p-2.5">
         <input
           type="text"
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
           placeholder="Barcode (e.g. BC-1001)"
-          className="w-32 px-2 py-1 text-xs border border-slate-200 rounded-lg font-mono focus:ring-1 focus:ring-amber-500"
+          className="w-28 px-2 py-1 text-xs border border-slate-200 rounded-lg font-mono focus:ring-1 focus:ring-amber-500"
           aria-label={`Barcode for copy ${copy.copyNumber}`}
         />
       </td>
@@ -996,26 +1431,61 @@ const CopyRow: React.FC<{
       <td className="p-2.5">
         <select
           value={status}
+          disabled={isIssued}
           onChange={(e) => setStatus(e.target.value)}
-          className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white font-bold text-slate-800"
+          className={`px-2 py-1 text-xs border rounded-lg bg-white font-bold ${
+            status === 'AVAILABLE'
+              ? 'text-emerald-700 border-emerald-200'
+              : status === 'ISSUED'
+              ? 'text-amber-700 border-amber-200 bg-amber-50/50'
+              : status === 'LOST'
+              ? 'text-red-700 border-red-200'
+              : status === 'DAMAGED'
+              ? 'text-orange-700 border-orange-200'
+              : status === 'WITHDRAWN'
+              ? 'text-slate-500 border-slate-200 bg-slate-100'
+              : 'text-slate-700 border-slate-200'
+          }`}
           aria-label={`Status for copy ${copy.copyNumber}`}
         >
           <option value="AVAILABLE">AVAILABLE</option>
-          <option value="ISSUED">ISSUED</option>
+          {isIssued && <option value="ISSUED">ISSUED (On Loan)</option>}
           <option value="RESERVED">RESERVED</option>
           <option value="LOST">LOST</option>
           <option value="DAMAGED">DAMAGED</option>
+          <option value="WITHDRAWN">WITHDRAWN</option>
         </select>
       </td>
-      <td className="p-2.5 text-right">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg transition disabled:opacity-50"
-          aria-label={`Save copy ${copy.copyNumber}`}
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+      <td className="p-2.5">
+        <input
+          type="text"
+          value={shelfLocation}
+          onChange={(e) => setShelfLocation(e.target.value)}
+          placeholder="Shelf location"
+          className="w-28 px-2 py-1 text-xs border border-slate-200 rounded-lg focus:ring-1 focus:ring-amber-500 font-medium"
+          aria-label={`Shelf location for copy ${copy.copyNumber}`}
+        />
+      </td>
+      <td className="p-2.5 text-right whitespace-nowrap">
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg transition disabled:opacity-50"
+            aria-label={`Save copy ${copy.copyNumber}`}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={onDeleteClick}
+            disabled={isIssued}
+            title={isIssued ? 'Cannot remove actively issued copy' : 'Remove or withdraw copy'}
+            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+            aria-label={`Remove copy ${copy.copyNumber}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </td>
     </tr>
   );

@@ -172,6 +172,41 @@ router.post('/inventory/reconcile', authenticate, authorize('LIBRARIAN'), async 
   }
 });
 
+// POST /api/books/:id/reconcile - Reconcile inventory counters for a specific book (Librarian only)
+router.post('/:id/reconcile', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const bookId = req.params.id;
+
+    if (!bookId || typeof bookId !== 'string' || !bookId.trim()) {
+      res.status(400).json({ error: 'Invalid bookId. Must be a non-empty string.' });
+      return;
+    }
+
+    const existing = await prisma.book.findUnique({
+      where: { id: bookId.trim() },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Book not found.' });
+      return;
+    }
+
+    const result = await reconcileBookCounters(existing.id, { actorId: req.user!.id });
+    res.json({
+      message: 'Inventory reconciliation completed for book.',
+      result,
+    });
+  } catch (error: any) {
+    if (error?.status) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Inventory reconciliation error:', error);
+    res.status(500).json({ error: 'Server error during inventory reconciliation.' });
+  }
+});
+
 // GET /api/books/:id - Book details
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
