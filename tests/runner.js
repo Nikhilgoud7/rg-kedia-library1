@@ -16,6 +16,7 @@ import { runCopyManagementTests } from './suites/copyManagement.test.js';
 import { runInventoryReconciliationTests } from './suites/inventoryReconciliation.test.js';
 import { runLostDamagedTests } from './suites/lostDamaged.test.js';
 import { runInventoryExperienceTests } from './suites/inventoryExperience.test.js';
+import { runInventoryCirculationTests } from './suites/inventoryCirculation.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -33,6 +34,7 @@ const SUITES = {
   inventoryReconciliation: { name: 'Inventory Reconciliation & Consistency Engine Suite (Phase 6C)', fn: runInventoryReconciliationTests },
   lostDamaged: { name: 'Zero-Fine Lost & Damaged Workflows Suite (Phase 6D)', fn: runLostDamagedTests },
   inventoryExperience: { name: 'Librarian Physical Inventory UI & Copy Management Suite (Phase 6E)', fn: runInventoryExperienceTests },
+  inventoryCirculation: { name: 'Real Inventory Circulation Integration & Barcode Operations Suite (Phase 6F)', fn: runInventoryCirculationTests },
 };
 
 async function checkHealth(url) {

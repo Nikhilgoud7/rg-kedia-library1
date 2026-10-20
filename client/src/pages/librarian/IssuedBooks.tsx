@@ -15,6 +15,9 @@ import {
   User,
   ShieldCheck,
   AlertCircle,
+  QrCode,
+  Barcode,
+  ArrowRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -110,6 +113,67 @@ export const IssuedBooks: React.FC = () => {
     }
   };
 
+  // Barcode return modal state
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
+  const [scannedData, setScannedData] = useState<any | null>(null);
+  const [barcodeResolution, setBarcodeResolution] = useState<'RETURNED' | 'DAMAGED' | 'LOST'>('RETURNED');
+  const [barcodeCondition, setBarcodeCondition] = useState('Damaged');
+  const [barcodeNotes, setBarcodeNotes] = useState('');
+  const [isSubmittingBarcodeReturn, setIsSubmittingBarcodeReturn] = useState(false);
+
+  const handleBarcodeLookup = async (codeToLookup?: string) => {
+    const code = (codeToLookup || barcodeInput).trim();
+    if (!code) {
+      toast.error('Please enter or scan a barcode.');
+      return;
+    }
+    try {
+      setLookingUpBarcode(true);
+      const res = await api.get(`/lending/lookup-barcode/${encodeURIComponent(code)}`);
+      setScannedData(res.data);
+      if (!res.data.activeLending) {
+        toast.error(`Copy (${code}) has no active issued loan (Status: ${res.data.copy?.status}).`, { duration: 4000 });
+      } else {
+        toast.success(`Active loan found for "${res.data.copy?.book?.title}"!`);
+      }
+    } catch (err: any) {
+      setScannedData(null);
+      toast.error(err.response?.data?.error || `Barcode "${code}" not found.`);
+    } finally {
+      setLookingUpBarcode(false);
+    }
+  };
+
+  const handleBarcodeReturnConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scannedData?.copy?.barcode) return;
+    try {
+      setIsSubmittingBarcodeReturn(true);
+      const payload: any = {
+        barcode: scannedData.copy.barcode,
+        resolution: barcodeResolution,
+      };
+      if (barcodeResolution === 'DAMAGED') {
+        payload.condition = barcodeCondition;
+      }
+      if (barcodeNotes.trim()) {
+        payload.notes = barcodeNotes.trim();
+      }
+      const res = await api.post('/lending/return-by-barcode', payload);
+      toast.success(res.data.message || 'Book returned successfully!');
+      setIsBarcodeModalOpen(false);
+      setScannedData(null);
+      setBarcodeInput('');
+      fetchLendings();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to process return by barcode.');
+    } finally {
+      setIsSubmittingBarcodeReturn(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -120,34 +184,51 @@ export const IssuedBooks: React.FC = () => {
             Track books currently issued to students and teachers, monitor due dates, and process returns
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => {
-              setFilter('ALL');
-              setPage(1);
+              setIsBarcodeModalOpen(true);
+              setBarcodeInput('');
+              setScannedData(null);
+              setBarcodeResolution('RETURNED');
+              setBarcodeCondition('Damaged');
+              setBarcodeNotes('');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              filter === 'ALL'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition shadow-xs flex items-center gap-2"
           >
-            All Active
+            <QrCode className="w-4 h-4" />
+            <span>Return by Barcode</span>
           </button>
-          <button
-            onClick={() => {
-              setFilter('OVERDUE');
-              setPage(1);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
-              filter === 'OVERDUE'
-                ? 'bg-red-600 text-white shadow-xs'
-                : 'text-red-600 hover:bg-red-50'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            Overdue Only
-          </button>
+
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => {
+                setFilter('ALL');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                filter === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Active
+            </button>
+            <button
+              onClick={() => {
+                setFilter('OVERDUE');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                filter === 'OVERDUE'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-red-600 hover:bg-red-50'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Overdue Only
+            </button>
+          </div>
         </div>
       </div>
 
@@ -157,7 +238,7 @@ export const IssuedBooks: React.FC = () => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
-            placeholder="Search active records by book title, student/teacher name, or roll number..."
+            placeholder="Search active records by book title, student/teacher name, roll number, or copy barcode..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -220,8 +301,16 @@ export const IssuedBooks: React.FC = () => {
                         <div className="text-slate-500 text-[11px]">
                           by {l.bookCopy?.book?.author}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                          Copy #{l.bookCopy?.copyNumber}
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>Copy #{l.bookCopy?.copyNumber}</span>
+                          {l.bookCopy?.barcode && (
+                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold border border-slate-200">
+                              {l.bookCopy.barcode}
+                            </span>
+                          )}
+                          {l.bookCopy?.shelfLocation && (
+                            <span className="text-slate-400">Rack: {l.bookCopy.shelfLocation}</span>
+                          )}
                         </div>
                       </td>
 
@@ -513,6 +602,234 @@ export const IssuedBooks: React.FC = () => {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Barcode Quick Return Modal */}
+      <Modal
+        isOpen={isBarcodeModalOpen}
+        onClose={() => {
+          if (!isSubmittingBarcodeReturn) {
+            setIsBarcodeModalOpen(false);
+            setScannedData(null);
+            setBarcodeInput('');
+          }
+        }}
+        title="Circulation Desk — Return by Barcode"
+        maxWidth="lg"
+      >
+        <div className="space-y-4 text-xs">
+          {/* Barcode Scan / Input Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleBarcodeLookup();
+            }}
+            className="flex items-center gap-2"
+          >
+            <div className="relative flex-1">
+              <QrCode className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Scan or enter barcode (e.g. BC-101)..."
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={lookingUpBarcode || !barcodeInput.trim()}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl font-bold transition flex items-center gap-1.5"
+            >
+              {lookingUpBarcode ? 'Searching...' : 'Lookup'}
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </form>
+
+          {/* Scanned Copy & Loan Details */}
+          {scannedData && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{scannedData.copy?.book?.title}</h4>
+                  <p className="text-slate-500 text-[11px]">by {scannedData.copy?.book?.author}</p>
+                </div>
+                <span className="font-mono text-[11px] font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                  {scannedData.copy?.barcode}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2.5 rounded-lg border border-slate-200">
+                <div>
+                  <span className="text-slate-400 block">Copy Number:</span>
+                  <span className="font-bold text-slate-800">Copy #{scannedData.copy?.copyNumber}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Shelf Location:</span>
+                  <span className="font-bold text-slate-800">{scannedData.copy?.shelfLocation || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Physical Condition:</span>
+                  <span className="font-bold text-slate-800">{scannedData.copy?.condition || 'Good'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Current Status:</span>
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded-full inline-block text-[10px] ${
+                      scannedData.copy?.status === 'ISSUED'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : scannedData.copy?.status === 'AVAILABLE'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}
+                  >
+                    {scannedData.copy?.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Loan Details */}
+              {scannedData.activeLending ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between text-blue-900 font-bold">
+                    <span>Active Loan Information</span>
+                    <span className="text-[10px] text-blue-700 font-mono">
+                      Due: {new Date(scannedData.activeLending.dueDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-blue-800">
+                    <div>
+                      Borrower: <strong>{scannedData.activeLending.borrower?.name}</strong>{' '}
+                      {scannedData.activeLending.borrower?.rollNumber && (
+                        <span className="font-mono">({scannedData.activeLending.borrower.rollNumber})</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-blue-600">
+                      {scannedData.activeLending.borrower?.program} {scannedData.activeLending.borrower?.branch} • {scannedData.activeLending.borrower?.email}
+                    </div>
+                  </div>
+
+                  {/* Return Settlement Form */}
+                  <form onSubmit={handleBarcodeReturnConfirm} className="space-y-3 pt-2 border-t border-blue-200/60">
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">
+                        Return Action / Resolution
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBarcodeResolution('RETURNED')}
+                          className={`py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition ${
+                            barcodeResolution === 'RETURNED'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Normal Return
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBarcodeResolution('DAMAGED')}
+                          className={`py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition ${
+                            barcodeResolution === 'DAMAGED'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Damaged
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBarcodeResolution('LOST')}
+                          className={`py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition ${
+                            barcodeResolution === 'LOST'
+                              ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Reported Lost
+                        </button>
+                      </div>
+                    </div>
+
+                    {barcodeResolution === 'DAMAGED' && (
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">
+                          Condition Assessment
+                        </label>
+                        <select
+                          value={barcodeCondition}
+                          onChange={(e) => setBarcodeCondition(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium text-xs focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="Damaged">Damaged (General damage)</option>
+                          <option value="Poor">Poor (Heavily worn/torn)</option>
+                          <option value="Fair">Fair (Minor tear/writing)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Circulation Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Scanned at front counter, spine intact"
+                        value={barcodeNotes}
+                        onChange={(e) => setBarcodeNotes(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium text-xs focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={isSubmittingBarcodeReturn}
+                        onClick={() => {
+                          setIsBarcodeModalOpen(false);
+                          setScannedData(null);
+                          setBarcodeInput('');
+                        }}
+                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmittingBarcodeReturn}
+                        className={`px-4 py-2 text-white rounded-xl font-bold transition shadow-xs flex items-center gap-1.5 ${
+                          barcodeResolution === 'RETURNED'
+                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                            : barcodeResolution === 'DAMAGED'
+                            ? 'bg-amber-600 hover:bg-amber-700'
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                      >
+                        <Check className="w-4 h-4" />
+                        {isSubmittingBarcodeReturn
+                          ? 'Processing...'
+                          : barcodeResolution === 'RETURNED'
+                          ? 'Confirm & Process Return'
+                          : barcodeResolution === 'DAMAGED'
+                          ? 'Confirm Damaged Return'
+                          : 'Confirm Lost Settlement'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    This copy is currently <strong>{scannedData.copy?.status}</strong> and has no active loan to return.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

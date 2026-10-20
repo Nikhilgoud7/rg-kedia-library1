@@ -17,6 +17,8 @@ import {
   MessageSquare,
   AlertCircle,
   Calendar,
+  QrCode,
+  Layers,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -36,6 +38,34 @@ export const LendingRequests: React.FC = () => {
   // Approval modal
   const [selectedApproveRequest, setSelectedApproveRequest] = useState<BookRequest | null>(null);
   const [daysToReturn, setDaysToReturn] = useState(30);
+  const [availableCopies, setAvailableCopies] = useState<any[]>([]);
+  const [selectedCopyId, setSelectedCopyId] = useState<string>('');
+  const [manualBarcode, setManualBarcode] = useState<string>('');
+  const [loadingCopies, setLoadingCopies] = useState(false);
+
+  // Fetch available copies when approval modal opens
+  useEffect(() => {
+    if (selectedApproveRequest?.bookId) {
+      setLoadingCopies(true);
+      setSelectedCopyId('');
+      setManualBarcode('');
+      api.get(`/books/${selectedApproveRequest.bookId}`)
+        .then((res) => {
+          const copies = res.data.book?.copies || [];
+          const avail = copies.filter((c: any) => c.status === 'AVAILABLE');
+          setAvailableCopies(avail);
+        })
+        .catch((err) => {
+          console.error('Failed to load copies for approval:', err);
+          setAvailableCopies([]);
+        })
+        .finally(() => setLoadingCopies(false));
+    } else {
+      setAvailableCopies([]);
+      setSelectedCopyId('');
+      setManualBarcode('');
+    }
+  }, [selectedApproveRequest]);
 
   // Rejection modal
   const [selectedRejectRequest, setSelectedRejectRequest] = useState<BookRequest | null>(null);
@@ -80,7 +110,14 @@ export const LendingRequests: React.FC = () => {
     e.preventDefault();
     if (!selectedApproveRequest) return;
     try {
-      await api.post(`/lending/approve/${selectedApproveRequest.id}`, { daysToReturn });
+      const payload: any = { daysToReturn };
+      if (manualBarcode.trim()) {
+        payload.barcode = manualBarcode.trim();
+      } else if (selectedCopyId) {
+        payload.bookCopyId = selectedCopyId;
+      }
+
+      await api.post(`/lending/approve/${selectedApproveRequest.id}`, payload);
       toast.success(
         `Book "${selectedApproveRequest.book?.title}" issued to ${selectedApproveRequest.user?.name} for ${daysToReturn} days!`
       );
@@ -412,6 +449,73 @@ export const LendingRequests: React.FC = () => {
                 </strong>{' '}
                 (Standard 30-day loan policy)
               </p>
+            </div>
+
+            {/* Physical Copy & Barcode Allocation */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-slate-600" />
+                  Physical Copy Allocation (Optional)
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {loadingCopies ? 'Loading copies...' : `${availableCopies.length} copy/copies available`}
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                  Select Available Copy
+                </label>
+                <select
+                  disabled={loadingCopies}
+                  value={selectedCopyId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedCopyId(id);
+                    if (id) {
+                      const match = availableCopies.find((c) => c.id === id);
+                      if (match?.barcode) {
+                        setManualBarcode(match.barcode);
+                      }
+                    } else {
+                      setManualBarcode('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium text-xs focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="">Auto-allocate next available copy (Default)</option>
+                  {availableCopies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Copy #{c.copyNumber} — Barcode: {c.barcode || 'N/A'} (Rack: {c.shelfLocation || 'N/A'}, Condition: {c.condition})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-[11px] flex items-center gap-1">
+                  <QrCode className="w-3 h-3 text-slate-500" />
+                  Scan or Enter Barcode Directly
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. BC-12345 (matches copy automatically)"
+                  value={manualBarcode}
+                  onChange={(e) => {
+                    const bc = e.target.value;
+                    setManualBarcode(bc);
+                    const match = availableCopies.find((c) => c.barcode?.toLowerCase() === bc.trim().toLowerCase());
+                    if (match) {
+                      setSelectedCopyId(match.id);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono text-xs focus:ring-2 focus:ring-amber-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Leave blank to auto-allocate or select from available copies above.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">

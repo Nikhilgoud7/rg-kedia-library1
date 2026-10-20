@@ -447,7 +447,13 @@ export const TeacherBrowseBooks: React.FC = () => {
                             className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold rounded-lg transition border border-blue-200 flex items-center gap-1"
                           >
                             <Users className="w-3.5 h-3.5" />
-                            <span>View Holders ({book.totalCopies - book.availableCopies})</span>
+                            <span>
+                              View Holders (
+                              {book.copies
+                                ? book.copies.filter((c: any) => c.status === 'ISSUED').length
+                                : Math.max(0, book.totalCopies - book.availableCopies)}
+                              )
+                            </span>
                           </button>
 
                           <button
@@ -550,13 +556,22 @@ export const TeacherBrowseBooks: React.FC = () => {
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             copy.status === 'AVAILABLE'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : copy.status === 'ISSUED'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : copy.status === 'DAMAGED'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : copy.status === 'LOST'
+                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
                           }`}
                         >
                           {copy.status}
                         </span>
                         {copy.barcode && (
-                          <span className="text-[10px] text-slate-400 font-mono">{copy.barcode}</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-medium">{copy.barcode}</span>
+                        )}
+                        {copy.shelfLocation && (
+                          <span className="text-[10px] text-slate-400">Rack: {copy.shelfLocation}</span>
                         )}
                       </div>
 
@@ -572,9 +587,25 @@ export const TeacherBrowseBooks: React.FC = () => {
                             Due on: {new Date(activeLending.dueDate).toLocaleDateString()}
                           </div>
                         </div>
-                      ) : (
+                      ) : copy.status === 'AVAILABLE' ? (
                         <div className="mt-0.5 text-emerald-600 font-semibold text-[11px]">
                           Available on shelf for immediate lending
+                        </div>
+                      ) : copy.status === 'DAMAGED' ? (
+                        <div className="mt-0.5 text-rose-600 font-semibold text-[11px]">
+                          Damaged ({copy.condition || 'Damaged'}) — unavailable for checkout
+                        </div>
+                      ) : copy.status === 'LOST' ? (
+                        <div className="mt-0.5 text-slate-500 font-semibold text-[11px]">
+                          Reported lost — unavailable for checkout
+                        </div>
+                      ) : copy.status === 'WITHDRAWN' ? (
+                        <div className="mt-0.5 text-slate-400 font-semibold text-[11px]">
+                          Withdrawn from circulation
+                        </div>
+                      ) : (
+                        <div className="mt-0.5 text-slate-500 font-semibold text-[11px]">
+                          Status: {copy.status}
                         </div>
                       )}
                     </div>

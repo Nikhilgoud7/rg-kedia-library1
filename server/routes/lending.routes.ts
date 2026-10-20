@@ -272,7 +272,7 @@ router.post('/request-return/:lendingId', authenticate, authorize('TEACHER', 'LI
 // POST /api/lending/approve/:requestId - Librarian approves and issues a book
 router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const rawDays = req.body.daysToReturn;
+    const rawDays = req.body?.daysToReturn;
     let daysToReturn = LOAN_PERIOD_DAYS;
     if (rawDays !== undefined && rawDays !== null && rawDays !== '') {
       const parsed = parseInt(String(rawDays), 10);
@@ -282,6 +282,18 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
       }
       daysToReturn = parsed;
     }
+
+    const { bookCopyId, barcode } = req.body || {};
+    if (bookCopyId !== undefined && bookCopyId !== null && (typeof bookCopyId !== 'string' || bookCopyId.trim().length === 0)) {
+      res.status(400).json({ error: 'bookCopyId must be a non-empty string.' });
+      return;
+    }
+    if (barcode !== undefined && barcode !== null && (typeof barcode !== 'string' || barcode.trim().length === 0)) {
+      res.status(400).json({ error: 'barcode must be a non-empty string.' });
+      return;
+    }
+    const cleanBookCopyId = typeof bookCopyId === 'string' && bookCopyId.trim().length > 0 ? bookCopyId.trim() : null;
+    const cleanBarcode = typeof barcode === 'string' && barcode.trim().length > 0 ? barcode.trim() : null;
 
     const result = await prisma.$transaction(async (tx) => {
       const request = await tx.bookRequest.findUnique({
@@ -319,20 +331,78 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
         throw { status: 400, error: 'User already has an active loan for this book.' };
       }
 
-      // Pick an AVAILABLE copy inside transaction and claim it
-      const availableCopies = await tx.bookCopy.findMany({
-        where: { bookId: request.bookId, status: 'AVAILABLE' },
-      });
-
       let claimedCopyId: string | null = null;
-      for (const copy of availableCopies) {
+      let targetCopy: any = null;
+
+      if (cleanBookCopyId || cleanBarcode) {
+        // Specific copy requested by ID and/or Barcode
+        if (cleanBookCopyId && cleanBarcode) {
+          targetCopy = await tx.bookCopy.findUnique({
+            where: { id: cleanBookCopyId },
+          });
+          if (!targetCopy) {
+            throw { status: 404, error: 'Specified physical copy not found.' };
+          }
+          if (targetCopy.barcode !== cleanBarcode) {
+            throw { status: 400, error: 'Provided bookCopyId and barcode do not identify the same copy.' };
+          }
+        } else if (cleanBookCopyId) {
+          targetCopy = await tx.bookCopy.findUnique({
+            where: { id: cleanBookCopyId },
+          });
+          if (!targetCopy) {
+            throw { status: 404, error: 'Specified physical copy not found.' };
+          }
+        } else if (cleanBarcode) {
+          targetCopy = await tx.bookCopy.findUnique({
+            where: { barcode: cleanBarcode },
+          });
+          if (!targetCopy) {
+            throw { status: 404, error: `Physical copy not found for barcode "${cleanBarcode}".` };
+          }
+        }
+
+        // Verify copy belongs to the requested book
+        if (targetCopy.bookId !== request.bookId) {
+          throw { status: 400, error: 'Specified copy does not belong to the requested book.' };
+        }
+
+        // Verify status is AVAILABLE
+        if (targetCopy.status !== 'AVAILABLE') {
+          throw {
+            status: 400,
+            error: `Specified copy is not available for issue (current status: ${targetCopy.status}).`,
+          };
+        }
+
+        // Claim specific copy
         const copyClaim = await tx.bookCopy.updateMany({
-          where: { id: copy.id, status: 'AVAILABLE' },
+          where: { id: targetCopy.id, status: 'AVAILABLE' },
           data: { status: 'ISSUED' },
         });
-        if (copyClaim.count === 1) {
-          claimedCopyId = copy.id;
-          break;
+
+        if (copyClaim.count === 0) {
+          throw { status: 400, error: 'Specified copy is no longer available to issue.' };
+        }
+
+        claimedCopyId = targetCopy.id;
+      } else {
+        // Pick an AVAILABLE copy inside transaction and claim it (fallback auto-allocation)
+        const availableCopies = await tx.bookCopy.findMany({
+          where: { bookId: request.bookId, status: 'AVAILABLE' },
+          orderBy: { copyNumber: 'asc' },
+        });
+
+        for (const copy of availableCopies) {
+          const copyClaim = await tx.bookCopy.updateMany({
+            where: { id: copy.id, status: 'AVAILABLE' },
+            data: { status: 'ISSUED' },
+          });
+          if (copyClaim.count === 1) {
+            claimedCopyId = copy.id;
+            targetCopy = copy;
+            break;
+          }
         }
       }
 
@@ -340,15 +410,15 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
         throw { status: 400, error: 'No copies available to issue.' };
       }
 
-      // Conditional claim on Book.availableCopies
-      const bookClaim = await tx.book.updateMany({
-        where: { id: request.bookId, availableCopies: { gt: 0 } },
-        data: { availableCopies: { decrement: 1 } },
+      // Recalculate authoritative parent book counts
+      const actual = await calculateActualBookCounts(request.bookId, tx);
+      await tx.book.update({
+        where: { id: request.bookId },
+        data: {
+          totalCopies: actual.totalCopies,
+          availableCopies: actual.availableCopies,
+        },
       });
-
-      if (bookClaim.count === 0) {
-        throw { status: 400, error: 'No copies available to issue.' };
-      }
 
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + daysToReturn);
@@ -384,6 +454,7 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
           borrowerName: request.user.name,
           borrowerRollNumber: request.user.rollNumber,
           copyId: claimedCopyId,
+          barcode: targetCopy?.barcode || null,
           dueDate: dueDate.toISOString(),
           daysToReturn,
         },
@@ -395,10 +466,15 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
         include: { book: true, user: true },
       });
 
-      return { request: updatedRequest, lending };
+      return { request: updatedRequest, lending, copy: targetCopy };
     }, { maxWait: 10000, timeout: 30000 });
 
-    res.json({ request: result.request, lending: result.lending, message: 'Book issued successfully.' });
+    res.json({
+      request: result.request,
+      lending: result.lending,
+      copy: result.copy,
+      message: 'Book issued successfully.',
+    });
   } catch (error: any) {
     if (error && error.status && error.error) {
       res.status(error.status).json({ error: error.error });
@@ -473,6 +549,159 @@ router.post('/reject/:requestId', authenticate, authorize('LIBRARIAN'), async (r
   }
 });
 
+// Helper for atomic lending returns and lost/damaged settlements
+async function executeLendingReturnTx(
+  lendingId: string,
+  resolution: string,
+  condition: string | undefined,
+  cleanNotes: string | null,
+  librarianId: string
+) {
+  const now = new Date();
+
+  return await prisma.$transaction(async (tx) => {
+    // PostgreSQL advisory transaction lock on the lending record
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lending:${lendingId}`}))`;
+
+    const lending = await tx.lending.findUnique({
+      where: { id: lendingId },
+      include: { bookCopy: { include: { book: true } }, user: true },
+    });
+
+    if (!lending) {
+      throw { status: 404, error: 'Active lending not found.' };
+    }
+
+    if (lending.status !== 'ISSUED') {
+      throw { status: 409, error: 'Book has already been returned or resolved.' };
+    }
+
+    // PostgreSQL advisory transaction lock on the parent book record
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${lending.bookCopy.bookId}`}))`;
+
+    let daysOverdue = 0;
+    if (now > lending.dueDate) {
+      daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    // Claim lending atomically
+    const claimedLending = await tx.lending.updateMany({
+      where: { id: lending.id, status: 'ISSUED' },
+      data: {
+        status: 'RETURNED',
+        returnedDate: now,
+        fine: 0,
+        notes: cleanNotes || lending.notes || null,
+      },
+    });
+
+    if (claimedLending.count === 0) {
+      throw { status: 409, error: 'Lending already returned or resolved.' };
+    }
+
+    // Determine copy status and condition based on resolution
+    let targetCopyStatus = 'AVAILABLE';
+    let targetCondition = lending.bookCopy.condition;
+
+    if (resolution === 'LOST') {
+      targetCopyStatus = 'LOST';
+    } else if (resolution === 'DAMAGED') {
+      targetCopyStatus = 'DAMAGED';
+      targetCondition = condition || 'Damaged';
+    } else {
+      // Normal RETURNED
+      targetCopyStatus = 'AVAILABLE';
+      if (condition) {
+        targetCondition = condition;
+      }
+    }
+
+    const updatedCopy = await tx.bookCopy.update({
+      where: { id: lending.bookCopyId },
+      data: {
+        status: targetCopyStatus,
+        condition: targetCondition,
+      },
+    });
+
+    // Authoritative parent book counter recalculation
+    const actual = await calculateActualBookCounts(lending.bookCopy.bookId, tx);
+    await tx.book.update({
+      where: { id: lending.bookCopy.bookId },
+      data: {
+        totalCopies: actual.totalCopies,
+        availableCopies: actual.availableCopies,
+      },
+    });
+
+    // Borrower notification with explicit zero-fine policy
+    let notificationTitle = 'Book Returned';
+    let notificationMessage = `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`;
+
+    if (resolution === 'LOST') {
+      notificationTitle = 'Book Reported Lost';
+      notificationMessage = `"${lending.bookCopy.book.title}" has been recorded as lost. Under college policy, no monetary fines are assessed.`;
+    } else if (resolution === 'DAMAGED') {
+      notificationTitle = 'Book Returned Damaged';
+      notificationMessage = `"${lending.bookCopy.book.title}" has been returned in damaged condition and scheduled for assessment. Under college policy, no monetary fines are assessed.`;
+    }
+
+    await tx.notification.create({
+      data: {
+        userId: lending.userId,
+        title: notificationTitle,
+        message: notificationMessage,
+        type: resolution === 'RETURNED' ? 'INFO' : 'WARNING',
+        link: lending.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
+      },
+    });
+
+    // Fulfill any pending return requests for this book & student
+    await tx.bookRequest.updateMany({
+      where: {
+        bookId: lending.bookCopy.bookId,
+        userId: lending.userId,
+        type: 'RETURN_REQUEST',
+        status: 'PENDING',
+      },
+      data: { status: 'APPROVED' },
+    });
+
+    // Transactional Audit Logging
+    let auditAction: AuditAction = AUDIT_ACTIONS.LENDING_RETURNED;
+    if (resolution === 'LOST') {
+      auditAction = AUDIT_ACTIONS.BOOK_COPY_LOST;
+    } else if (resolution === 'DAMAGED') {
+      auditAction = AUDIT_ACTIONS.BOOK_COPY_DAMAGED;
+    }
+
+    await logAdminAction({
+      actorId: librarianId,
+      action: auditAction,
+      targetId: resolution === 'RETURNED' ? lending.id : lending.bookCopyId,
+      details: {
+        lendingId: lending.id,
+        bookId: lending.bookCopy.bookId,
+        bookTitle: lending.bookCopy.book.title,
+        copyId: lending.bookCopyId,
+        copyNumber: lending.bookCopy.copyNumber,
+        barcode: lending.bookCopy.barcode || null,
+        userId: lending.userId,
+        borrowerName: lending.user.name,
+        borrowerRollNumber: lending.user.rollNumber,
+        resolution,
+        condition: targetCondition,
+        notes: cleanNotes || null,
+        daysOverdue,
+        fine: 0,
+      },
+      tx,
+    });
+
+    return { daysOverdue, resolution, updatedCopy, lending };
+  }, { maxWait: 10000, timeout: 30000 });
+}
+
 // POST /api/lending/return/:lendingId - Librarian marks book as returned, damaged, or lost
 router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -502,148 +731,7 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
     }
     const cleanNotes = typeof notes === 'string' && notes.trim().length > 0 ? notes.trim() : null;
 
-    const now = new Date();
-
-    const result = await prisma.$transaction(async (tx) => {
-      // PostgreSQL advisory transaction lock on the lending record
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lending:${req.params.lendingId}`}))`;
-
-      const lending = await tx.lending.findUnique({
-        where: { id: req.params.lendingId },
-        include: { bookCopy: { include: { book: true } }, user: true },
-      });
-
-      if (!lending) {
-        throw { status: 404, error: 'Active lending not found.' };
-      }
-
-      if (lending.status !== 'ISSUED') {
-        throw { status: 409, error: 'Book has already been returned or resolved.' };
-      }
-
-      // PostgreSQL advisory transaction lock on the parent book record
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`book:${lending.bookCopy.bookId}`}))`;
-
-      let daysOverdue = 0;
-      if (now > lending.dueDate) {
-        daysOverdue = Math.ceil((now.getTime() - lending.dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      }
-
-      // Claim lending atomically
-      const claimedLending = await tx.lending.updateMany({
-        where: { id: lending.id, status: 'ISSUED' },
-        data: {
-          status: 'RETURNED',
-          returnedDate: now,
-          fine: 0,
-          notes: cleanNotes || lending.notes || null,
-        },
-      });
-
-      if (claimedLending.count === 0) {
-        throw { status: 409, error: 'Lending already returned or resolved.' };
-      }
-
-      // Determine copy status and condition based on resolution
-      let targetCopyStatus = 'AVAILABLE';
-      let targetCondition = lending.bookCopy.condition;
-
-      if (resolution === 'LOST') {
-        targetCopyStatus = 'LOST';
-      } else if (resolution === 'DAMAGED') {
-        targetCopyStatus = 'DAMAGED';
-        targetCondition = condition || 'Damaged';
-      } else {
-        // Normal RETURNED
-        targetCopyStatus = 'AVAILABLE';
-        if (condition) {
-          targetCondition = condition;
-        }
-      }
-
-      const updatedCopy = await tx.bookCopy.update({
-        where: { id: lending.bookCopyId },
-        data: {
-          status: targetCopyStatus,
-          condition: targetCondition,
-        },
-      });
-
-      // Authoritative parent book counter recalculation
-      const actual = await calculateActualBookCounts(lending.bookCopy.bookId, tx);
-      await tx.book.update({
-        where: { id: lending.bookCopy.bookId },
-        data: {
-          totalCopies: actual.totalCopies,
-          availableCopies: actual.availableCopies,
-        },
-      });
-
-      // Borrower notification with explicit zero-fine policy
-      let notificationTitle = 'Book Returned';
-      let notificationMessage = `"${lending.bookCopy.book.title}" has been successfully returned to the library.${daysOverdue > 0 ? ` Returned ${daysOverdue} days late.` : ''}`;
-
-      if (resolution === 'LOST') {
-        notificationTitle = 'Book Reported Lost';
-        notificationMessage = `"${lending.bookCopy.book.title}" has been recorded as lost. Under college policy, no monetary fines are assessed.`;
-      } else if (resolution === 'DAMAGED') {
-        notificationTitle = 'Book Returned Damaged';
-        notificationMessage = `"${lending.bookCopy.book.title}" has been returned in damaged condition and scheduled for assessment. Under college policy, no monetary fines are assessed.`;
-      }
-
-      await tx.notification.create({
-        data: {
-          userId: lending.userId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: resolution === 'RETURNED' ? 'INFO' : 'WARNING',
-          link: lending.user.role === 'TEACHER' ? '/teacher/borrowings' : '/student/borrowings',
-        },
-      });
-
-      // Fulfill any pending return requests for this book & student
-      await tx.bookRequest.updateMany({
-        where: {
-          bookId: lending.bookCopy.bookId,
-          userId: lending.userId,
-          type: 'RETURN_REQUEST',
-          status: 'PENDING',
-        },
-        data: { status: 'APPROVED' },
-      });
-
-      // Transactional Audit Logging
-      let auditAction: AuditAction = AUDIT_ACTIONS.LENDING_RETURNED;
-      if (resolution === 'LOST') {
-        auditAction = AUDIT_ACTIONS.BOOK_COPY_LOST;
-      } else if (resolution === 'DAMAGED') {
-        auditAction = AUDIT_ACTIONS.BOOK_COPY_DAMAGED;
-      }
-
-      await logAdminAction({
-        actorId: req.user!.id,
-        action: auditAction,
-        targetId: resolution === 'RETURNED' ? lending.id : lending.bookCopyId,
-        details: {
-          lendingId: lending.id,
-          bookId: lending.bookCopy.bookId,
-          bookTitle: lending.bookCopy.book.title,
-          copyId: lending.bookCopyId,
-          copyNumber: lending.bookCopy.copyNumber,
-          userId: lending.userId,
-          borrowerName: lending.user.name,
-          borrowerRollNumber: lending.user.rollNumber,
-          resolution,
-          condition: targetCondition,
-          notes: cleanNotes || null,
-          daysOverdue,
-          fine: 0,
-        },
-        tx,
-      });
-
-      return { daysOverdue, resolution, updatedCopy };
-    }, { maxWait: 10000, timeout: 30000 });
+    const result = await executeLendingReturnTx(req.params.lendingId, resolution, condition, cleanNotes, req.user!.id);
 
     let successMessage = 'Book returned successfully.';
     if (result.resolution === 'LOST') {
@@ -667,6 +755,93 @@ router.post('/return/:lendingId', authenticate, authorize('LIBRARIAN'), async (r
     }
     console.error('Return book error:', error);
     res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// POST /api/lending/return-by-barcode - Librarian marks book as returned, damaged, or lost using barcode
+router.post('/return-by-barcode', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { barcode, resolution = 'RETURNED', condition, notes } = req.body || {};
+
+    if (!barcode || typeof barcode !== 'string' || barcode.trim().length === 0) {
+      res.status(400).json({ error: 'Valid barcode is required.' });
+      return;
+    }
+
+    const allowedResolutions = ['RETURNED', 'DAMAGED', 'LOST'];
+    if (!allowedResolutions.includes(resolution)) {
+      res.status(400).json({ error: `Invalid resolution. Allowed: ${allowedResolutions.join(', ')}.` });
+      return;
+    }
+
+    const allowedConditions = ['Good', 'Fair', 'Poor', 'Damaged'];
+    if (condition !== undefined && condition !== null && condition !== '' && !allowedConditions.includes(condition)) {
+      res.status(400).json({ error: `Invalid condition. Allowed: ${allowedConditions.join(', ')}.` });
+      return;
+    }
+
+    if (notes !== undefined && notes !== null) {
+      if (typeof notes !== 'string') {
+        res.status(400).json({ error: 'Notes must be a string.' });
+        return;
+      }
+      if (notes.length > 500) {
+        res.status(400).json({ error: 'Notes cannot exceed 500 characters.' });
+        return;
+      }
+    }
+    const cleanNotes = typeof notes === 'string' && notes.trim().length > 0 ? notes.trim() : null;
+    const cleanBarcode = barcode.trim();
+
+    // Find the copy by barcode
+    const copy = await prisma.bookCopy.findUnique({
+      where: { barcode: cleanBarcode },
+      include: {
+        lendings: {
+          where: { status: 'ISSUED' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!copy) {
+      res.status(404).json({ error: `Physical copy not found for barcode "${cleanBarcode}".` });
+      return;
+    }
+
+    const activeLending = copy.lendings && copy.lendings.length > 0 ? copy.lendings[0] : null;
+    if (!activeLending) {
+      res.status(400).json({
+        error: `Physical copy (${cleanBarcode}) has no active issued loan to return (current status: ${copy.status}).`,
+      });
+      return;
+    }
+
+    const result = await executeLendingReturnTx(activeLending.id, resolution, condition, cleanNotes, req.user!.id);
+
+    let successMessage = 'Book returned successfully.';
+    if (result.resolution === 'LOST') {
+      successMessage = 'Book loan settled as lost. Zero fine assessed.';
+    } else if (result.resolution === 'DAMAGED') {
+      successMessage = 'Book returned in damaged condition. Zero fine assessed.';
+    }
+
+    res.json({
+      message: successMessage,
+      fine: 0,
+      fineMessage: null,
+      resolution: result.resolution,
+      copyStatus: result.updatedCopy.status,
+      copy: result.updatedCopy,
+      barcode: cleanBarcode,
+    });
+  } catch (error: any) {
+    if (error && error.status && error.error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    console.error('Return by barcode error:', error);
+    res.status(500).json({ error: 'Server error processing return by barcode.' });
   }
 });
 
@@ -976,6 +1151,88 @@ router.post('/cancel-request/:requestId', authenticate, async (req: AuthRequest,
   }
 });
 
+// GET /api/lending/lookup-barcode/:barcode - Look up physical copy and active loan details by barcode (Librarian only)
+router.get('/lookup-barcode/:barcode', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const rawBarcode = req.params.barcode;
+    if (!rawBarcode || typeof rawBarcode !== 'string' || rawBarcode.trim().length === 0) {
+      res.status(400).json({ error: 'Barcode parameter is required.' });
+      return;
+    }
+
+    const cleanBarcode = rawBarcode.trim();
+    const copy = await prisma.bookCopy.findUnique({
+      where: { barcode: cleanBarcode },
+      include: {
+        book: {
+          select: {
+            id: true,
+            title: true,
+            author: true,
+            isbn: true,
+            publisher: true,
+            edition: true,
+            category: true,
+            segment: true,
+            shelfLocation: true,
+          },
+        },
+        lendings: {
+          where: { status: 'ISSUED' },
+          take: 1,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                rollNumber: true,
+                program: true,
+                branch: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!copy) {
+      res.status(404).json({ error: `Physical copy not found for barcode "${cleanBarcode}".` });
+      return;
+    }
+
+    const activeLending = copy.lendings && copy.lendings.length > 0 ? copy.lendings[0] : null;
+
+    res.json({
+      copy: {
+        id: copy.id,
+        bookId: copy.bookId,
+        copyNumber: copy.copyNumber,
+        barcode: copy.barcode,
+        condition: copy.condition,
+        shelfLocation: copy.shelfLocation || copy.book.shelfLocation || null,
+        status: copy.status,
+        book: copy.book,
+      },
+      activeLending: activeLending
+        ? {
+            id: activeLending.id,
+            issuedDate: activeLending.issuedDate,
+            dueDate: activeLending.dueDate,
+            status: activeLending.status,
+            fine: activeLending.fine,
+            renewalCount: activeLending.renewalCount,
+            borrower: activeLending.user,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error('Barcode lookup error:', error);
+    res.status(500).json({ error: 'Server error looking up barcode.' });
+  }
+});
+
 // GET /api/lending/all - All active lendings (Teacher and Librarian)
 router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1005,6 +1262,7 @@ router.get('/all', authenticate, authorize('TEACHER', 'LIBRARIAN'), async (req: 
         { user: { name: { contains: search as string, mode: 'insensitive' } } },
         { user: { rollNumber: { contains: search as string, mode: 'insensitive' } } },
         { bookCopy: { book: { title: { contains: search as string, mode: 'insensitive' } } } },
+        { bookCopy: { barcode: { contains: search as string, mode: 'insensitive' } } },
       ];
     }
 
