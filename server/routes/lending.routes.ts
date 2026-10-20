@@ -463,7 +463,20 @@ router.post('/approve/:requestId', authenticate, authorize('LIBRARIAN'), async (
 
       const updatedRequest = await tx.bookRequest.findUnique({
         where: { id: request.id },
-        include: { book: true, user: true },
+        include: {
+          book: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              rollNumber: true,
+              program: true,
+              branch: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
       });
 
       return { request: updatedRequest, lending, copy: targetCopy };

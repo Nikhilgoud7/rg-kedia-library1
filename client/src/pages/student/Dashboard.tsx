@@ -300,6 +300,7 @@ export const StudentDashboard: React.FC = () => {
                         </h4>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           by {lending.bookCopy?.book?.author} • Copy #{lending.bookCopy?.copyNumber}
+                          {lending.bookCopy?.barcode ? ` (${lending.bookCopy.barcode})` : ''}
                         </p>
                       </div>
 

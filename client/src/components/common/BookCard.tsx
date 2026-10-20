@@ -47,7 +47,7 @@ export const BookCard: React.FC<BookCardProps> = ({
               </>
             ) : (
               <>
-                <XCircle className="w-3 h-3" /> All {book.totalCopies} Issued
+                <XCircle className="w-3 h-3" /> 0 of {book.totalCopies} Available
               </>
             )}
           </span>

@@ -338,7 +338,10 @@ export const TeacherDashboard: React.FC = () => {
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Copy #{lending.bookCopy?.copyNumber}</span>
+                    <span className="text-slate-500 font-medium">
+                      Copy #{lending.bookCopy?.copyNumber}
+                      {lending.bookCopy?.barcode ? ` (${lending.bookCopy.barcode})` : ''}
+                    </span>
                     <div className="text-right">
                       <span
                         className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full inline-block ${

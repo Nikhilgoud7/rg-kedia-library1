@@ -171,13 +171,23 @@ export const MyBorrowings: React.FC = () => {
                   }`}
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                         {lending.bookCopy?.book?.segment || 'Textbook'}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-[11px] font-mono text-slate-500 font-medium">
                         Copy #{lending.bookCopy?.copyNumber}
                       </span>
+                      {lending.bookCopy?.barcode && (
+                        <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          Barcode: {lending.bookCopy.barcode}
+                        </span>
+                      )}
+                      {(lending.bookCopy?.shelfLocation || lending.bookCopy?.book?.shelfLocation) && (
+                        <span className="text-[10px] font-medium bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
+                          Rack: {lending.bookCopy?.shelfLocation || lending.bookCopy?.book?.shelfLocation}
+                        </span>
+                      )}
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900">
@@ -412,7 +422,11 @@ export const MyBorrowings: React.FC = () => {
                     <tr key={l.id}>
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-800">{l.bookCopy?.book?.title}</div>
-                        <div className="text-[11px] text-slate-500">by {l.bookCopy?.book?.author}</div>
+                        <div className="text-[11px] text-slate-500">
+                          by {l.bookCopy?.book?.author}
+                          {l.bookCopy?.copyNumber ? ` • Copy #${l.bookCopy.copyNumber}` : ''}
+                          {l.bookCopy?.barcode ? ` (${l.bookCopy.barcode})` : ''}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
