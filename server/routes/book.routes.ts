@@ -7,6 +7,13 @@ import {
   reconcileAllBookCounters,
 } from '../lib/inventoryReconciliation.js';
 
+import { generateBookImportTemplateCsv } from '../lib/bulkImportFormat.js';
+import {
+  validateBulkImportCsv,
+  checkDatabaseDuplicates,
+  MAX_IMPORT_FILE_SIZE,
+} from '../lib/bulkImportValidation.js';
+
 const router = Router();
 
 // GET /api/books - List all books with filters
@@ -124,6 +131,54 @@ router.get('/segments', authenticate, async (_req: AuthRequest, res: Response): 
     res.json({ segments: segments.map((s: any) => ({ name: s.segment, bookCount: s._count.id })) });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// GET /api/books/import/template - Download bulk book import CSV template (Librarian only)
+router.get('/import/template', authenticate, authorize('LIBRARIAN'), async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const csvContent = generateBookImportTemplateCsv();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="rg_kedia_book_import_template.csv"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Template generation error:', error);
+    res.status(500).json({ error: 'Server error generating import template.' });
+  }
+});
+
+// POST /api/books/import/validate - Validate bulk import CSV content without committing (Librarian only)
+router.post('/import/validate', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { csvContent } = req.body || {};
+
+    if (!csvContent || typeof csvContent !== 'string') {
+      res.status(400).json({ error: 'CSV content is required (string payload).' });
+      return;
+    }
+
+    if (Buffer.byteLength(csvContent, 'utf8') > MAX_IMPORT_FILE_SIZE) {
+      res.status(400).json({ error: 'File content exceeds maximum allowed size of 5MB.' });
+      return;
+    }
+
+    const validationResult = validateBulkImportCsv(csvContent);
+
+    // If valid so far, perform read-only check for existing database duplicates
+    let databaseDuplicates = { existingIsbns: [] as any[], existingBarcodes: [] as any[] };
+    if (validationResult.validRows.length > 0) {
+      databaseDuplicates = await checkDatabaseDuplicates(validationResult.validRows, prisma);
+    }
+
+    res.json({
+      isValid: validationResult.isValid && databaseDuplicates.existingIsbns.length === 0 && databaseDuplicates.existingBarcodes.length === 0,
+      validation: validationResult,
+      databaseDuplicates,
+    });
+  } catch (error) {
+    console.error('Bulk import validation error:', error);
+    res.status(500).json({ error: 'Server error during bulk import validation.' });
   }
 });
 

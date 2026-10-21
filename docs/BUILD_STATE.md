@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 6F)**: `03197152e0543c9338c2b7740ec70dee8fc702f0`
-- **Current Head**: Completing Phase 6G + 6H (Physical Inventory Final Gate & Lifecycle)
+- **Committed Baseline (Phase 6G-6H)**: `1ffcbb5c672b213a38e67b52214b609e5bb844e0`
+- **Current Head**: Completing Phase 7A (Bulk Book Import Foundation & Validation)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -28,30 +28,29 @@
 - **Phase 6E**: Librarian Physical Inventory UI & Copy Management Experience (`inventoryExperience.test.js` — 48 assertions, commit `0c5ec93`).
 - **Phase 6F**: Real Inventory Circulation Integration, Barcode Operations & Teacher Catalog (`inventoryCirculation.test.js` — 55 assertions, commit `0319715`).
 - **Phase 6G**: Cross-Persona Physical Inventory & Student/Faculty Visibility Hardening (`crossPersonaInventory.test.js` — 44 assertions).
-  - Student & Faculty active loans display assigned physical copy barcode and shelf location.
-  - Student loan history displays copy number and barcode.
-  - Strict privacy protection: other students' roll numbers and personal details completely masked.
-  - Catalog availability badge corrected to `0 of N Available` when unavailable copies are lost or damaged.
-- **Phase 6H**: Physical Inventory Final Quality Gate & End-to-End Lifecycle Suite (`inventoryFinalGate.test.js` — 49 assertions).
-  - Complete physical copy lifecycle test: creation, barcode assignment, batch copy addition, condition/location updates, counter drift injection, reconciliation self-healing, barcode-specific checkout, cross-persona verification, barcode return, lost copy settlement under zero-fine policy, safe historical copy withdrawal vs unborrowed copy hard-deletion, bulk reconciliation verification, and zero credential leakage across all endpoints.
-  - Sanitized borrower projections in lending approval endpoints.
+- **Phase 6H**: Physical Inventory Final Quality Gate & End-to-End Lifecycle Suite (`inventoryFinalGate.test.js` — 49 assertions, commit `1ffcbb5`).
+- **Phase 7A**: Bulk Book Import Foundation & Validation (`bulkImportFoundation.test.js` — 59 assertions).
+  - Designed RFC 4180 zero-dependency CSV format and serializer with formula injection sanitization (`=`, `+`, `-`, `@`, `\t`, `\r` escaped with `'`).
+  - Added downloadable template endpoint `GET /api/books/import/template` (Librarian only, UTF-8 BOM, attachment headers, example rows).
+  - Implemented reusable validation engine (`server/lib/bulkImportValidation.ts`) checking title, author, segment, ISBN-10/13 normalization, in-sheet duplicate ISBNs, duplicate barcodes, condition/program mappings, copy count bounds, and file limits.
+  - Added read-only duplicate detector (`checkDatabaseDuplicates`) and validation endpoint `POST /api/books/import/validate`.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 3 — Complete (Physical Inventory Management & Circulation)
-- **Current Sub-Phase**: Phase 6H Complete (Stage 3 Final Gate Passed)
-- **Gate 3 Status**: READY / APPROVED
+- **Current Stage**: STAGE 3 — In Progress (Phase 7: Bulk Data Operations & CSV Import Engine)
+- **Current Sub-Phase**: Phase 7A Complete
+- **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
 - **Working Tree**: Clean upon commit
-- **Verification Status**: 697/697 regression test assertions passing across 18 suites; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 756/756 regression test assertions passing across 19 suites; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
-## Gate 3 Metrics Summary
-- **Total Test Suites**: 18
-- **Total Test Assertions**: 697 (697 Passed, 0 Failed, 0 Skipped, Duration: ~203s)
+## Metrics Summary
+- **Total Test Suites**: 19
+- **Total Test Assertions**: 756 (756 Passed, 0 Failed, 0 Skipped, Duration: ~213s)
 - **Database Engine**: Neon PostgreSQL (Serverless, branch: `production`)
-- **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock` serializes all copy mutations, checkouts, and reconciliation)
+- **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
 - **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
-- **Zero-Fine Policy**: Strict zero-fine enforcement for returned, overdue, lost, and damaged materials per RG-Kedia College policy
+- **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
 
 ## Active Test Commands
 - **Full Automated Regression Suite**: `npm test`
@@ -73,6 +72,7 @@
 - **Inventory Circulation Suite**: `npm run test:inventory-circulation`
 - **Cross-Persona Inventory Suite**: `npm run test:cross-persona-inventory`
 - **Inventory Final Gate Suite**: `npm run test:inventory-final-gate`
+- **Bulk Import Foundation Suite**: `npm run test:bulk-import-foundation`
 
 ## Next Up
-- Stage 3 Gate Review / Transition to Phase 7: Bulk Data Operations & CSV/Excel Import Engine.
+- Phase 7B: Streaming File Ingestion, Chunked Transaction Processing & Batch Advisory Locking.
