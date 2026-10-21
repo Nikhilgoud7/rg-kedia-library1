@@ -207,6 +207,12 @@ export class TestDataManager {
         await this.prisma.auditLog.deleteMany({
           where: { targetId: { in: bookIds } },
         });
+
+        // Delete bookProgram curriculum mappings
+        await this.prisma.bookProgram.deleteMany({
+          where: { bookId: { in: bookIds } },
+        });
+
         // Delete any lendings referencing copies of created books
         await this.prisma.lending.deleteMany({
           where: { bookCopy: { bookId: { in: bookIds } } },

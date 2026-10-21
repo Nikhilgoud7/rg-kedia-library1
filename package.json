@@ -39,7 +39,8 @@
     "test:inventory-circulation": "node tests/runner.js --allow-tests --suite=inventoryCirculation",
     "test:cross-persona-inventory": "node tests/runner.js --allow-tests --suite=crossPersonaInventory",
     "test:inventory-final-gate": "node tests/runner.js --allow-tests --suite=inventoryFinalGate",
-    "test:bulk-import-foundation": "node tests/runner.js --allow-tests --suite=bulkImportFoundation"
+    "test:bulk-import-foundation": "node tests/runner.js --allow-tests --suite=bulkImportFoundation",
+    "test:bulk-import-execution": "node tests/runner.js --allow-tests --suite=bulkImportExecution"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

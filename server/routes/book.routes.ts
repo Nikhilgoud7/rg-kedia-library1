@@ -1,4 +1,6 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
+import multer from 'multer';
+import path from 'path';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { logAdminAction, AUDIT_ACTIONS, AuditAction } from '../lib/auditLogger.js';
 import {
@@ -13,8 +15,45 @@ import {
   checkDatabaseDuplicates,
   MAX_IMPORT_FILE_SIZE,
 } from '../lib/bulkImportValidation.js';
+import { executeBulkBookImport } from '../lib/bulkImportService.js';
 
 const router = Router();
+
+// In-memory Multer for safe bulk book import processing (zero permanent disk writes)
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMPORT_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.csv') {
+      return cb(new Error('Only CSV files are allowed (.csv extension).'));
+    }
+    cb(null, true);
+  },
+});
+
+const handleImportUpload = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return next();
+  }
+
+  importUpload.single('file')(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'File content exceeds maximum allowed size of 5MB.' });
+        return;
+      }
+      res.status(400).json({ error: `Upload error: ${err.message}` });
+      return;
+    }
+    if (err) {
+      res.status(400).json({ error: err.message || 'File upload error.' });
+      return;
+    }
+    next();
+  });
+};
 
 // GET /api/books - List all books with filters
 router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -149,12 +188,17 @@ router.get('/import/template', authenticate, authorize('LIBRARIAN'), async (_req
 });
 
 // POST /api/books/import/validate - Validate bulk import CSV content without committing (Librarian only)
-router.post('/import/validate', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/import/validate', authenticate, authorize('LIBRARIAN'), handleImportUpload, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { csvContent } = req.body || {};
+    let csvContent = '';
+    if (req.file && req.file.buffer) {
+      csvContent = req.file.buffer.toString('utf8');
+    } else if (req.body && typeof req.body.csvContent === 'string') {
+      csvContent = req.body.csvContent;
+    }
 
     if (!csvContent || typeof csvContent !== 'string') {
-      res.status(400).json({ error: 'CSV content is required (string payload).' });
+      res.status(400).json({ error: 'CSV content is required (string payload or file upload).' });
       return;
     }
 
@@ -179,6 +223,43 @@ router.post('/import/validate', authenticate, authorize('LIBRARIAN'), async (req
   } catch (error) {
     console.error('Bulk import validation error:', error);
     res.status(500).json({ error: 'Server error during bulk import validation.' });
+  }
+});
+
+// POST /api/books/import/execute - Ingest and execute transactional bulk book import (Librarian only)
+router.post('/import/execute', authenticate, authorize('LIBRARIAN'), handleImportUpload, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let csvText = '';
+    if (req.file && req.file.buffer) {
+      csvText = req.file.buffer.toString('utf8');
+    } else if (req.body && typeof req.body.csvContent === 'string') {
+      csvText = req.body.csvContent;
+    }
+
+    if (!csvText || typeof csvText !== 'string' || !csvText.trim()) {
+      res.status(400).json({ error: 'CSV content is required (string payload or file upload).' });
+      return;
+    }
+
+    if (Buffer.byteLength(csvText, 'utf8') > MAX_IMPORT_FILE_SIZE) {
+      res.status(400).json({ error: 'File content exceeds maximum allowed size of 5MB.' });
+      return;
+    }
+
+    const result = await executeBulkBookImport(prisma, {
+      csvText,
+      actorId: req.user!.id,
+    });
+
+    if (!result.success) {
+      res.status(result.status || 400).json(result);
+      return;
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Bulk import execution error:', error);
+    res.status(500).json({ error: 'Server error during bulk import execution.' });
   }
 });
 
