@@ -86,7 +86,11 @@ export async function executeBulkBookImport(
   try {
     // Process each batch in an isolated transaction
     for (let batchIdx = 0; batchIdx < chunks.length; batchIdx++) {
+      // Defense-in-depth: Failure simulation is strictly isolated to test environments
+      // and cannot be activated in production or standard execution.
+      const isTestEnv = process.env.NODE_ENV === 'test';
       if (
+        isTestEnv &&
         options.testSimulateFailureBatchIdx !== undefined &&
         batchIdx === options.testSimulateFailureBatchIdx
       ) {

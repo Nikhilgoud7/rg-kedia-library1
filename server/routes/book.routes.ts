@@ -16,6 +16,7 @@ import {
   MAX_IMPORT_FILE_SIZE,
 } from '../lib/bulkImportValidation.js';
 import { executeBulkBookImport } from '../lib/bulkImportService.js';
+import { IS_PRODUCTION, NODE_ENV } from '../config.js';
 
 const router = Router();
 
@@ -255,11 +256,14 @@ router.post('/import/execute', authenticate, authorize('LIBRARIAN'), handleImpor
       }
     }
 
-    const testSimulateHeader = req.headers['x-test-simulate-failure-batch'];
+    // Test failure simulation is strictly restricted to automated test runs (NODE_ENV === 'test' && !IS_PRODUCTION).
+    // In production or standard development, this header is completely ignored to prevent artificial failure injection.
+    const isTestEnvironment = NODE_ENV === 'test' && !IS_PRODUCTION;
+    const testSimulateHeader = isTestEnvironment ? req.headers['x-test-simulate-failure-batch'] : undefined;
     let testSimulateFailureBatchIdx: number | undefined = undefined;
     if (testSimulateHeader && typeof testSimulateHeader === 'string') {
       const parsedIdx = parseInt(testSimulateHeader, 10);
-      if (!isNaN(parsedIdx)) {
+      if (!isNaN(parsedIdx) && parsedIdx >= 0) {
         testSimulateFailureBatchIdx = parsedIdx;
       }
     }

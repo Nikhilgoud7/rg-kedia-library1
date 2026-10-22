@@ -1,5 +1,6 @@
 // tests/suites/bulkImportFinalGate.test.js — Phase 7D Bulk Import Final Quality Gate Test Suite
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { createApiClient, findLeakedSecrets } from '../helpers/apiClient.js';
 import { TestDataManager } from '../helpers/testData.js';
 import {
@@ -673,6 +674,78 @@ export async function runBulkImportFinalGateTests(baseUrl, assert) {
     assert(auditDetails.rollback === true, 'Audit log details confirm rollback: true');
     assert(auditDetails.cleanupSuccess === true, 'Audit log details confirm cleanupSuccess: true');
     assert(auditDetails.booksRemovedCount >= 1, 'Audit log details report count of books removed');
+
+    // 8.3 Failure Injection Security & Boundary Checks
+    // (a) Invalid non-numeric header cannot trigger failure or affect normal import
+    const validSingleRow1 = [
+      [...BULK_IMPORT_COLUMNS],
+      [
+        `Invalid Header Book ${runSuffix}`,
+        'Test Author',
+        '',
+        '',
+        '',
+        '2024',
+        'TEXTBOOK',
+        'Commerce',
+        '',
+        '1',
+        '',
+        `IH-${runSuffix}-1`,
+        'Good',
+        'BCOM',
+      ],
+    ];
+    const invalidHeaderRes = await librarianClient.request('POST', '/api/books/import/execute', {
+      headers: {
+        'x-test-simulate-failure-batch': 'invalid-not-a-number',
+      },
+      body: { csvContent: serializeCsv(validSingleRow1) },
+    });
+    assert(invalidHeaderRes.status === 200, 'Invalid header value string is ignored and import succeeds');
+    assert(invalidHeaderRes.data.success === true, 'Import reports success despite non-numeric simulate header');
+    if (invalidHeaderRes.data.summary?.bookIds?.[0]) {
+      dataManager.createdBookIds.add(invalidHeaderRes.data.summary.bookIds[0]);
+    }
+
+    // (b) Negative batch index header cannot trigger failure
+    const validSingleRow2 = [
+      [...BULK_IMPORT_COLUMNS],
+      [
+        `Negative Header Book ${runSuffix}`,
+        'Test Author',
+        '',
+        '',
+        '',
+        '2024',
+        'TEXTBOOK',
+        'Commerce',
+        '',
+        '1',
+        '',
+        `NH-${runSuffix}-1`,
+        'Good',
+        'BCOM',
+      ],
+    ];
+    const negHeaderRes = await librarianClient.request('POST', '/api/books/import/execute', {
+      headers: {
+        'x-test-simulate-failure-batch': '-1',
+      },
+      body: { csvContent: serializeCsv(validSingleRow2) },
+    });
+    assert(negHeaderRes.status === 200, 'Negative batch index header is ignored and import succeeds');
+    assert(negHeaderRes.data.success === true, 'Import reports success despite negative simulate header');
+    if (negHeaderRes.data.summary?.bookIds?.[0]) {
+      dataManager.createdBookIds.add(negHeaderRes.data.summary.bookIds[0]);
+    }
+
+    // (c) Production environment verification: service-level failure injection is strictly ignored when NODE_ENV === 'production'
+    const prodGateOutput = execSync(
+      `npx tsx -e "process.env.NODE_ENV = 'production'; import('./server/lib/bulkImportService.js').then(m => m.executeBulkBookImport({}, { csvText: '', actorId: 'test', testSimulateFailureBatchIdx: 0 })).then(r => console.log('STATUS:' + r.status));"`,
+      { stdio: 'pipe' }
+    ).toString();
+    assert(prodGateOutput.includes('STATUS:400'), 'Service-level gate ignores failure injection when NODE_ENV is production');
 
     // ---------------------------------------------------------
     // 9. File Size Boundary & Multipart Safety Tests

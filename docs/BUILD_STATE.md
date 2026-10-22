@@ -56,26 +56,30 @@
   - Extended `Modal.tsx` to support wide modals (`maxWidth="4xl" | "5xl" | "6xl"`).
   - Added dedicated automated regression test suite `tests/suites/bulkImportUIWorkflow.test.js` with 79 verified assertions.
 
-- **Phase 7D**: Bulk Import Final Quality Gate (`bulkImportFinalGate.test.js` — 64 assertions).
+- **Phase 7D**: Bulk Import Final Quality Gate (`bulkImportFinalGate.test.js` — 69 assertions).
   - Hardened database conflict row attribution in `checkDatabaseDuplicates` (`server/lib/bulkImportValidation.ts`), returning `row: r.rowNumber`, conflicting identifiers, and existing database titles/IDs.
   - Updated `BulkImportModal.tsx` preview grid to highlight database-conflicting rows with badges and specific field collision callouts alongside file-level errors.
   - Achieved client/server validation parity in `client/src/lib/csvHelper.ts` for trailing blank rows, 4-digit publication years (`1000 <= year <= currentYear + 1`), integer `TotalCopies`, comma and semicolon copy delimiter support, and case-insensitive condition matching.
   - Fortified multi-batch compensating rollback in `server/lib/bulkImportService.ts` with atomic batch processing, cleanup tracking, and administrative audit logging (`AUDIT_ACTIONS.BOOK_DELETED` with `{ batchImport: true, rollback: true, cleanupSuccess: true, booksRemovedCount }`).
-  - Added full test suite `tests/suites/bulkImportFinalGate.test.js` covering 15 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, 5MB upload boundary, and recursive zero-secrets leakage scan).
+  - Restricted failure injection header `x-test-simulate-failure-batch` strictly to genuine automated test environments (`NODE_ENV === 'test' && !IS_PRODUCTION`). Completely ignored in production and standard runtime environments.
+  - Established a dedicated, isolated Neon PostgreSQL test branch (`test` branch, compute endpoint `ep-autumn-sky-b3vpykh4`), separated from the production branch (`ep-aged-sunset-b3548him`).
+  - Added fail-closed test environment guard in `tests/helpers/envGuard.js` that rejects execution if `TEST_DATABASE_URL` is missing, malformed, points to a known production endpoint, or ambiguously reuses the production connection.
+  - Added full test suite `tests/suites/bulkImportFinalGate.test.js` covering 16 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, failure injection security [invalid headers, negative values, production service-level gate], 5MB upload boundary, and recursive zero-secrets leakage scan).
   - Registered suite in `tests/runner.js` and added `"test:bulk-import-final-gate"` script in `package.json`.
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 3 — In Progress (Phase 7: Bulk Data Operations & CSV Import Engine)
-- **Current Sub-Phase**: Phase 7D Complete
+- **Current Sub-Phase**: Phase 7D Complete (Hardened & Verified on Isolated Neon Test Branch)
 - **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
 - **Working Tree**: Clean upon commit
-- **Verification Status**: 950/950 regression test assertions passing across 22 suites; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 955/955 regression test assertions passing across 22 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
 ## Metrics Summary
 - **Total Test Suites**: 22
-- **Total Test Assertions**: 950 (950 Passed, 0 Failed, 0 Skipped, Duration: ~271s)
-- **Database Engine**: Neon PostgreSQL (Serverless, branch: `production`)
+- **Total Test Assertions**: 955 (955 Passed, 0 Failed, 0 Skipped, Duration: ~253s)
+- **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
+- **Test Database Isolation**: Verified fail-closed guard preventing tests from running against production branch
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
 - **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation

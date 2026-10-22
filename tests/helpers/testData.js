@@ -5,7 +5,11 @@ import crypto from 'crypto';
 
 export class TestDataManager {
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = new PrismaClient({
+      datasources: process.env.DATABASE_URL
+        ? { db: { url: process.env.DATABASE_URL } }
+        : undefined,
+    });
     this.sessionPrefix = `reg_${crypto.randomBytes(4).toString('hex')}`;
     this.createdUserIds = new Set();
     this.createdBookIds = new Set();

@@ -69,7 +69,13 @@ async function ensureServer(baseUrl, port) {
   const child = spawn('npx', ['tsx', 'server/index.ts'], {
     shell: true,
     stdio: 'pipe',
-    env: { ...process.env, PORT: String(port) },
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      PORT: String(port),
+      DATABASE_URL: process.env.DATABASE_URL,
+      DIRECT_URL: process.env.DIRECT_URL,
+    },
   });
 
   const maxAttempts = 30;
