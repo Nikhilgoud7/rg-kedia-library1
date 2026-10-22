@@ -24,6 +24,7 @@ export const VALID_CONDITIONS = ['Good', 'Fair', 'Poor', 'Damaged'] as const;
 export const VALID_PROGRAMS = ['BCOM', 'BBA', 'BSC'] as const;
 
 export const MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+export const MAX_IMPORT_ROWS = 1000;
 
 export interface RawCsvRow {
   rowNumber: number; // 1-based index corresponding to data rows in the sheet
@@ -118,25 +119,23 @@ export function parseCsv(csvText: string): string[][] {
         continue;
       } else if (char === '\r') {
         if (nextChar === '\n') {
-          currentRow.push(currentField);
-          rows.push(currentRow);
-          currentRow = [];
-          currentField = '';
-          i += 2;
-          continue;
-        } else {
-          currentRow.push(currentField);
-          rows.push(currentRow);
-          currentRow = [];
-          currentField = '';
-          i++;
-          continue;
+          i++; // Skip \n
         }
+        currentRow.push(currentField);
+        currentField = '';
+        if (currentRow.some((f) => f.trim().length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        i++;
+        continue;
       } else if (char === '\n') {
         currentRow.push(currentField);
-        rows.push(currentRow);
-        currentRow = [];
         currentField = '';
+        if (currentRow.some((f) => f.trim().length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
         i++;
         continue;
       } else {
@@ -147,10 +146,12 @@ export function parseCsv(csvText: string): string[][] {
     }
   }
 
-  // Push final trailing field/row if any
+  // Push final trailing field/row if any and not blank
   if (currentField.length > 0 || currentRow.length > 0) {
     currentRow.push(currentField);
-    rows.push(currentRow);
+    if (currentRow.some((f) => f.trim().length > 0)) {
+      rows.push(currentRow);
+    }
   }
 
   return rows;
@@ -187,10 +188,20 @@ export function preValidateCsvData(
     }
   }
 
+  // Enforce maximum row limit (1,000 data rows)
+  if (rows.length > MAX_IMPORT_ROWS) {
+    errors.push({
+      row: 0,
+      column: 'Data',
+      message: `File exceeds maximum row limit of ${MAX_IMPORT_ROWS} data rows (found ${rows.length} rows).`,
+    });
+  }
+
   const seenIsbns = new Map<string, number>();
   const seenBarcodes = new Map<string, number>();
   let totalPhysicalCopies = 0;
   let totalBarcodes = 0;
+  const currentYear = new Date().getFullYear();
 
   rows.forEach((row, rowIdx) => {
     const rowNumber = rowIdx + 1; // 1-based data row
@@ -232,69 +243,96 @@ export function preValidateCsvData(
       programs: programsStr,
     });
 
-    // Validate Title
+    // Validate Title (required, max 255)
     if (!title) {
-      errors.push({ row: rowNumber, column: 'Title', message: 'Title is required.' });
+      errors.push({ row: rowNumber, column: 'Title', message: 'Book title is required.' });
+    } else if (title.length > 255) {
+      errors.push({ row: rowNumber, column: 'Title', message: `Title exceeds maximum length of 255 characters (length: ${title.length}).`, value: title });
     }
 
-    // Validate Author
+    // Validate Author (required, max 255)
     if (!author) {
       errors.push({ row: rowNumber, column: 'Author', message: 'Author is required.' });
+    } else if (author.length > 255) {
+      errors.push({ row: rowNumber, column: 'Author', message: `Author exceeds maximum length of 255 characters (length: ${author.length}).`, value: author });
     }
 
-    // Validate Segment
+    // Validate Segment (required, max 100)
     if (!segment) {
-      errors.push({ row: rowNumber, column: 'Segment', message: 'Segment/Subject is required.' });
+      errors.push({ row: rowNumber, column: 'Segment', message: 'Academic segment is required (e.g. Accounting, Statistics, Computer Science).' });
+    } else if (segment.length > 100) {
+      errors.push({ row: rowNumber, column: 'Segment', message: 'Segment exceeds maximum length of 100 characters.', value: segment });
     }
 
-    // Validate Category
+    // Validate Publisher (optional, max 255)
+    if (publisher && publisher.length > 255) {
+      errors.push({ row: rowNumber, column: 'Publisher', message: 'Publisher exceeds maximum length of 255 characters.', value: publisher });
+    }
+
+    // Validate Edition (optional, max 100)
+    if (edition && edition.length > 100) {
+      errors.push({ row: rowNumber, column: 'Edition', message: 'Edition exceeds maximum length of 100 characters.', value: edition });
+    }
+
+    // Validate Description (optional, max 2000)
+    if (description && description.length > 2000) {
+      errors.push({ row: rowNumber, column: 'Description', message: 'Description exceeds maximum length of 2000 characters.' });
+    }
+
+    // Validate ShelfLocation (optional, max 100)
+    if (shelfLocation && shelfLocation.length > 100) {
+      errors.push({ row: rowNumber, column: 'ShelfLocation', message: 'Shelf location exceeds maximum length of 100 characters.', value: shelfLocation });
+    }
+
+    // Validate Category (optional, default TEXTBOOK)
     if (category && !(VALID_CATEGORIES as readonly string[]).includes(category.toUpperCase())) {
       errors.push({
         row: rowNumber,
         column: 'Category',
-        message: `Invalid Category "${category}". Allowed: ${VALID_CATEGORIES.join(', ')}`,
+        message: `Invalid category "${category}". Allowed: ${VALID_CATEGORIES.join(', ')}.`,
         value: category,
       });
     }
 
-    // Validate PublicationYear
+    // Validate PublicationYear (optional, integer 1000 to currentYear + 1, 4-digit regex)
     if (publicationYear) {
-      const year = parseInt(publicationYear, 10);
-      const currentYear = new Date().getFullYear();
-      if (isNaN(year) || year < 1800 || year > currentYear + 1) {
+      const parsedYear = parseInt(publicationYear, 10);
+      if (isNaN(parsedYear) || !/^\d{4}$/.test(publicationYear) || parsedYear < 1000 || parsedYear > currentYear + 1) {
         errors.push({
           row: rowNumber,
           column: 'PublicationYear',
-          message: `Publication Year must be a valid 4-digit year between 1800 and ${currentYear + 1}.`,
+          message: `Invalid publication year "${publicationYear}". Must be a 4-digit year between 1000 and ${currentYear + 1}.`,
           value: publicationYear,
         });
       }
     }
 
-    // Validate TotalCopies
+    // Validate TotalCopies (optional, integer 1 to 100, strict integer check)
     let parsedCopies = 1;
     if (totalCopiesStr) {
-      parsedCopies = parseInt(totalCopiesStr, 10);
-      if (isNaN(parsedCopies) || parsedCopies < 1 || parsedCopies > 100) {
+      const parsed = parseInt(totalCopiesStr, 10);
+      if (isNaN(parsed) || parsed < 1 || parsed > 100 || !/^\d+$/.test(totalCopiesStr)) {
         errors.push({
           row: rowNumber,
           column: 'TotalCopies',
-          message: 'TotalCopies must be a number between 1 and 100.',
+          message: `Invalid total copies "${totalCopiesStr}". Must be an integer between 1 and 100.`,
           value: totalCopiesStr,
         });
         parsedCopies = 1;
+      } else {
+        parsedCopies = parsed;
       }
     }
     totalPhysicalCopies += parsedCopies;
 
-    // Validate ISBN
+    // Validate ISBN (optional, format & uniqueness)
     if (isbn) {
       const cleanIsbn = normalizeIsbn(isbn);
       if (!isValidIsbn(cleanIsbn)) {
         errors.push({
           row: rowNumber,
           column: 'ISBN',
-          message: `Invalid ISBN format "${isbn}". Must be a valid 10 or 13-digit ISBN.`,
+          message: `Invalid ISBN format "${isbn}". Must be a valid 10 or 13 digit ISBN.`,
           value: isbn,
         });
       } else {
@@ -303,7 +341,7 @@ export function preValidateCsvData(
           errors.push({
             row: rowNumber,
             column: 'ISBN',
-            message: `Duplicate ISBN in sheet: "${isbn}" was already declared in Row ${firstSeen}.`,
+            message: `Duplicate ISBN "${isbn}" in file (previously seen in Row ${firstSeen}).`,
             value: isbn,
           });
         } else {
@@ -312,25 +350,46 @@ export function preValidateCsvData(
       }
     }
 
-    // Validate Barcodes
+    // Validate Barcodes (optional, semicolon/comma delimited, max 100 per barcode)
     if (barcodesStr) {
-      const barcodes = barcodesStr.split(';').map((b) => b.trim()).filter(Boolean);
+      const barcodes = barcodesStr.split(/[;,]/).map((b) => b.trim()).filter(Boolean);
       if (barcodes.length > parsedCopies) {
         errors.push({
           row: rowNumber,
           column: 'Barcodes',
-          message: `Barcodes count (${barcodes.length}) exceeds TotalCopies (${parsedCopies}).`,
+          message: `Row specifies ${barcodes.length} barcodes but TotalCopies is ${parsedCopies}. Barcodes count cannot exceed TotalCopies.`,
           value: barcodesStr,
         });
       }
+      const rowSeenBarcodes = new Set<string>();
       for (const bc of barcodes) {
+        if (bc.length > 100) {
+          errors.push({
+            row: rowNumber,
+            column: 'Barcodes',
+            message: `Barcode "${bc}" exceeds maximum length of 100 characters.`,
+            value: bc,
+          });
+          continue;
+        }
         totalBarcodes++;
+        if (rowSeenBarcodes.has(bc)) {
+          errors.push({
+            row: rowNumber,
+            column: 'Barcodes',
+            message: `Duplicate barcode "${bc}" within row ${rowNumber}.`,
+            value: bc,
+          });
+        } else {
+          rowSeenBarcodes.add(bc);
+        }
+
         if (seenBarcodes.has(bc)) {
           const firstSeen = seenBarcodes.get(bc)!;
           errors.push({
             row: rowNumber,
             column: 'Barcodes',
-            message: `Duplicate barcode in sheet: "${bc}" was already declared in Row ${firstSeen}.`,
+            message: `Duplicate barcode "${bc}" in file (previously declared in Row ${firstSeen}).`,
             value: bc,
           });
         } else {
@@ -339,11 +398,20 @@ export function preValidateCsvData(
       }
     }
 
-    // Validate CopyConditions
+    // Validate CopyConditions (optional, semicolon/comma delimited, case-insensitive)
     if (copyConditionsStr) {
-      const conditions = copyConditionsStr.split(';').map((c) => c.trim()).filter(Boolean);
+      const conditions = copyConditionsStr.split(/[;,]/).map((c) => c.trim()).filter(Boolean);
+      if (conditions.length > parsedCopies) {
+        errors.push({
+          row: rowNumber,
+          column: 'CopyConditions',
+          message: `Specified ${conditions.length} conditions but TotalCopies is ${parsedCopies}.`,
+          value: copyConditionsStr,
+        });
+      }
       for (const cond of conditions) {
-        if (!(VALID_CONDITIONS as readonly string[]).includes(cond)) {
+        const matching = VALID_CONDITIONS.find((vc) => vc.toLowerCase() === cond.toLowerCase());
+        if (!matching) {
           errors.push({
             row: rowNumber,
             column: 'CopyConditions',
@@ -354,7 +422,7 @@ export function preValidateCsvData(
       }
     }
 
-    // Validate Programs
+    // Validate Programs (optional, semicolon delimited PROGRAM:BRANCH or PROGRAM)
     if (programsStr) {
       const progItems = programsStr.split(';').map((p) => p.trim()).filter(Boolean);
       for (const item of progItems) {
@@ -363,7 +431,7 @@ export function preValidateCsvData(
           errors.push({
             row: rowNumber,
             column: 'Programs',
-            message: `Invalid Program "${progCode}". Allowed: ${VALID_PROGRAMS.join(', ')}.`,
+            message: `Invalid program "${progCode}". Allowed: ${VALID_PROGRAMS.join(', ')}.`,
             value: progCode,
           });
         }

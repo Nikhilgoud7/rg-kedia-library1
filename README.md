@@ -48,7 +48,9 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
 - **Central Dashboard**: Real-time stats on total inventory, physical copies, active loans, and overdue counts.
 - **Book Inventory Management**: Add/edit/delete book titles, manage individual physical copies with unique barcodes, assign shelf rack locations (e.g., `Rack A-1`), and map curriculum relevance.
 - **Lending Requests Approval Queue**: Approve/reject student borrow requests with customizable loan durations.
-- **Issued Books & Returns**: Active loan tracker with automatic overdue fine calculation (₹2/day) and one-click return processing.
+- **Issued Books & Returns**: Active loan tracker with zero-monetary-fine academic governance, automated return alerts, and one-click return processing.
+- **Bulk Book CSV Import Engine**: High-throughput spreadsheet ingestion supporting up to 1,000 titles per file, RFC 4180 parsing, client-side preview, server validation, duplicate collision attribution, and transactional chunking with PostgreSQL advisory locking and zero partial imports.
+- **Physical Copy Reconciliation**: Self-healing inventory engine resolving anomalies between book-level totals and physical copy allocations.
 - **Student & Faculty Directory**: Register new members, manage branch specializations, track second language selections, and reset passwords.
 - **Exam Guide Repository Manager**: Upload and organize past university papers and solution guides.
 
@@ -58,8 +60,9 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
 
 - **Frontend**: React 19, Vite, Tailwind CSS v4, Lucide Icons, React Router v7, React Hot Toast, Axios
 - **Backend**: Node.js, Express.js (ESM), TypeScript, Multer
-- **Database & ORM**: SQLite, Prisma ORM
-- **Authentication**: JWT (JSON Web Tokens), bcryptjs password hashing
+- **Database & ORM**: PostgreSQL (Neon Serverless), Prisma ORM with advisory transactions
+- **Governance & Policy**: Strict zero-monetary-fine architecture with academic notifications and administrative audit logging
+- **Authentication**: JWT (JSON Web Tokens) with tokenVersion session revocation, bcryptjs password hashing
 
 ---
 
@@ -88,7 +91,7 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
 
 3. **Set up the Database & Seed Sample Data**:
    ```bash
-   # Generate Prisma client and create SQLite tables
+   # Generate Prisma client and sync database schema
    npx prisma generate
    npx prisma db push
 

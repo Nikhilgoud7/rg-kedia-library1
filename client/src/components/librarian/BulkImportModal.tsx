@@ -620,6 +620,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                     ? `${dbDuplicates.existingBarcodes.length} barcode(s) already assigned in database.`
                     : ''}
                 </p>
+                {clientErrors.filter((e) => e.row === 0).map((e, idx) => (
+                  <div key={idx} className="text-[11px] font-semibold text-rose-800 bg-rose-100/60 px-2 py-1 rounded">
+                    {e.column}: {e.message}
+                  </div>
+                ))}
               </div>
             ) : serverError ? (
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2">

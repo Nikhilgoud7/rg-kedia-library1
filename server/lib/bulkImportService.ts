@@ -8,6 +8,7 @@ export interface BulkImportOptions {
   csvText: string;
   actorId: string;
   batchSize?: number;
+  testSimulateFailureBatchIdx?: number;
 }
 
 export interface BulkImportSuccessResult {
@@ -83,8 +84,17 @@ export async function executeBulkBookImport(
   let totalCopiesCreated = 0;
 
   try {
-    // Process each batch of 50 in an isolated transaction
+    // Process each batch in an isolated transaction
     for (let batchIdx = 0; batchIdx < chunks.length; batchIdx++) {
+      if (
+        options.testSimulateFailureBatchIdx !== undefined &&
+        batchIdx === options.testSimulateFailureBatchIdx
+      ) {
+        throw {
+          status: 409,
+          message: `Simulated test failure on batch index ${batchIdx} for rollback verification.`,
+        };
+      }
       const currentChunk = chunks[batchIdx];
 
       const batchResult = await prisma.$transaction(
@@ -218,14 +228,40 @@ export async function executeBulkBookImport(
       },
     };
   } catch (err: any) {
+    let cleanupSuccess = false;
+    let cleanupErrorMsg: string | null = null;
+
     // If a subsequent batch fails, roll back any previously committed batches from this run
     if (allCreatedBookIds.length > 0) {
       try {
         await prisma.book.deleteMany({
           where: { id: { in: allCreatedBookIds } },
         });
-      } catch (cleanupErr) {
+        cleanupSuccess = true;
+      } catch (cleanupErr: any) {
+        cleanupErrorMsg = cleanupErr?.message || String(cleanupErr);
         console.error('Failed to clean up previously committed batches after import failure:', cleanupErr);
+      }
+
+      // Record rollback audit event
+      try {
+        await logAdminAction({
+          actorId,
+          action: AUDIT_ACTIONS.BOOK_DELETED,
+          targetId: allCreatedBookIds[0],
+          details: {
+            batchImport: true,
+            rollback: true,
+            reason: err?.message || 'Server error during batch import execution.',
+            booksRemovedCount: allCreatedBookIds.length,
+            copiesRemovedCount: totalCopiesCreated,
+            deletedBookIds: allCreatedBookIds,
+            cleanupSuccess,
+            ...(cleanupErrorMsg ? { cleanupError: cleanupErrorMsg } : {}),
+          },
+        });
+      } catch (auditErr) {
+        console.error('Failed to log rollback audit action:', auditErr);
       }
     }
 
@@ -235,6 +271,7 @@ export async function executeBulkBookImport(
       success: false,
       status,
       error: errorMessage,
+      details: cleanupErrorMsg ? { cleanupFailed: true, cleanupError: cleanupErrorMsg } : undefined,
     };
   }
 }

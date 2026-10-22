@@ -481,8 +481,20 @@ export async function checkDatabaseDuplicates(
   rows: ParsedBookRow[],
   prisma: PrismaClient
 ): Promise<{
-  existingIsbns: Array<{ isbn: string; title: string; existingBookId: string }>;
-  existingBarcodes: Array<{ barcode: string; existingCopyId: string; existingBookTitle: string }>;
+  existingIsbns: Array<{
+    row: number;
+    isbn: string;
+    title: string;
+    existingTitle: string;
+    existingBookId: string;
+  }>;
+  existingBarcodes: Array<{
+    row: number;
+    barcode: string;
+    existingCopyId: string;
+    existingBookTitle: string;
+    bookTitle: string;
+  }>;
 }> {
   const isbns = rows.map((r) => r.isbn).filter((isbn): isbn is string => Boolean(isbn));
   const barcodes = rows.flatMap((r) => r.barcodes).filter(Boolean);
@@ -502,20 +514,59 @@ export async function checkDatabaseDuplicates(
       : Promise.resolve([]),
   ]);
 
+  const existingIsbns: Array<{
+    row: number;
+    isbn: string;
+    title: string;
+    existingTitle: string;
+    existingBookId: string;
+  }> = [];
+
+  for (const book of matchedBooks) {
+    if (!book.isbn) continue;
+    const cleanDbIsbn = normalizeIsbn(book.isbn);
+    for (const r of rows) {
+      if (r.isbn && normalizeIsbn(r.isbn) === cleanDbIsbn) {
+        existingIsbns.push({
+          row: r.rowNumber,
+          isbn: book.isbn,
+          title: book.title,
+          existingTitle: book.title,
+          existingBookId: book.id,
+        });
+      }
+    }
+  }
+
+  const existingBarcodes: Array<{
+    row: number;
+    barcode: string;
+    existingCopyId: string;
+    existingBookTitle: string;
+    bookTitle: string;
+  }> = [];
+
+  for (const copy of matchedCopies) {
+    if (!copy.barcode) continue;
+    for (const r of rows) {
+      if (r.barcodes.includes(copy.barcode)) {
+        existingBarcodes.push({
+          row: r.rowNumber,
+          barcode: copy.barcode,
+          existingCopyId: copy.id,
+          existingBookTitle: copy.book.title,
+          bookTitle: copy.book.title,
+        });
+      }
+    }
+  }
+
+  // Sort conflicts by row number ascending
+  existingIsbns.sort((a, b) => a.row - b.row);
+  existingBarcodes.sort((a, b) => a.row - b.row);
+
   return {
-    existingIsbns: matchedBooks
-      .filter((b) => Boolean(b.isbn))
-      .map((b) => ({
-        isbn: b.isbn as string,
-        title: b.title,
-        existingBookId: b.id,
-      })),
-    existingBarcodes: matchedCopies
-      .filter((c) => Boolean(c.barcode))
-      .map((c) => ({
-        barcode: c.barcode as string,
-        existingCopyId: c.id,
-        existingBookTitle: c.book.title,
-      })),
+    existingIsbns,
+    existingBarcodes,
   };
 }

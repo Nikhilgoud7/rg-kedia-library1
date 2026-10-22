@@ -41,7 +41,8 @@
     "test:inventory-final-gate": "node tests/runner.js --allow-tests --suite=inventoryFinalGate",
     "test:bulk-import-foundation": "node tests/runner.js --allow-tests --suite=bulkImportFoundation",
     "test:bulk-import-execution": "node tests/runner.js --allow-tests --suite=bulkImportExecution",
-    "test:bulk-import-ui": "node tests/runner.js --allow-tests --suite=bulkImportUIWorkflow"
+    "test:bulk-import-ui": "node tests/runner.js --allow-tests --suite=bulkImportUIWorkflow",
+    "test:bulk-import-final-gate": "node tests/runner.js --allow-tests --suite=bulkImportFinalGate"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

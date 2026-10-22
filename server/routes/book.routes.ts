@@ -246,9 +246,29 @@ router.post('/import/execute', authenticate, authorize('LIBRARIAN'), handleImpor
       return;
     }
 
+    let batchSize = 50;
+    const requestedBatch = req.query.batchSize || (req.body && req.body.batchSize);
+    if (requestedBatch) {
+      const parsedBatch = parseInt(requestedBatch as string, 10);
+      if (!isNaN(parsedBatch) && parsedBatch > 0 && parsedBatch <= 500) {
+        batchSize = parsedBatch;
+      }
+    }
+
+    const testSimulateHeader = req.headers['x-test-simulate-failure-batch'];
+    let testSimulateFailureBatchIdx: number | undefined = undefined;
+    if (testSimulateHeader && typeof testSimulateHeader === 'string') {
+      const parsedIdx = parseInt(testSimulateHeader, 10);
+      if (!isNaN(parsedIdx)) {
+        testSimulateFailureBatchIdx = parsedIdx;
+      }
+    }
+
     const result = await executeBulkBookImport(prisma, {
       csvText,
       actorId: req.user!.id,
+      batchSize,
+      testSimulateFailureBatchIdx,
     });
 
     if (!result.success) {
