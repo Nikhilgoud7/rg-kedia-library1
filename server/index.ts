@@ -45,8 +45,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '6mb' }));
+app.use(express.urlencoded({ extended: true, limit: '6mb' }));
 
 // Serve uploaded files with JSON 404 fallback for missing files
 const uploadsDir = path.join(rootDir, 'uploads');

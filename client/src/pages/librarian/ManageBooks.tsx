@@ -21,8 +21,10 @@ import {
   CheckCircle,
   PackagePlus,
   MinusCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import BulkImportModal from '../../components/librarian/BulkImportModal';
 
 export const ManageBooks: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -40,6 +42,7 @@ export const ManageBooks: React.FC = () => {
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCopiesModalOpen, setIsCopiesModalOpen] = useState(false);
   const [selectedBookForCopies, setSelectedBookForCopies] = useState<any | null>(null);
@@ -239,30 +242,40 @@ export const ManageBooks: React.FC = () => {
             Maintain college library book stock, shelf placements, and copy availability
           </p>
         </div>
-        <button
-          onClick={() => {
-            setFormData({
-              title: '',
-              author: '',
-              isbn: '',
-              publisher: '',
-              edition: '',
-              publicationYear: new Date().getFullYear(),
-              category: 'TEXTBOOK',
-              segment: 'Accounting & Finance',
-              description: '',
-              totalCopies: 5,
-              shelfLocation: 'Rack A-1',
-              programs: [{ program: 'BCOM', branch: 'General' }],
-            });
-            setIsAddModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition"
-          aria-label="Add New Book Title"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Book Title</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setIsBulkImportModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition"
+            aria-label="Bulk Import Books via CSV"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+            <span>Bulk Import CSV</span>
+          </button>
+          <button
+            onClick={() => {
+              setFormData({
+                title: '',
+                author: '',
+                isbn: '',
+                publisher: '',
+                edition: '',
+                publicationYear: new Date().getFullYear(),
+                category: 'TEXTBOOK',
+                segment: 'Accounting & Finance',
+                description: '',
+                totalCopies: 5,
+                shelfLocation: 'Rack A-1',
+                programs: [{ program: 'BCOM', branch: 'General' }],
+              });
+              setIsAddModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition"
+            aria-label="Add New Book Title"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Book Title</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters and Search Bar */}
@@ -945,6 +958,13 @@ export const ManageBooks: React.FC = () => {
           isReconciling={reconcilingBookId === selectedBookForCopies.id}
         />
       )}
+
+      {/* Bulk Book Import Modal */}
+      <BulkImportModal
+        isOpen={isBulkImportModalOpen}
+        onClose={() => setIsBulkImportModalOpen(false)}
+        onSuccess={() => fetchBooks(page)}
+      />
     </div>
   );
 };

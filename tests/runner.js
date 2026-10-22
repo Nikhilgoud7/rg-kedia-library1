@@ -21,6 +21,7 @@ import { runCrossPersonaInventoryTests } from './suites/crossPersonaInventory.te
 import { runInventoryFinalGateTests } from './suites/inventoryFinalGate.test.js';
 import { runBulkImportFoundationTests } from './suites/bulkImportFoundation.test.js';
 import { runBulkImportExecutionTests } from './suites/bulkImportExecution.test.js';
+import { runBulkImportUIWorkflowTests } from './suites/bulkImportUIWorkflow.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -43,6 +44,7 @@ const SUITES = {
   inventoryFinalGate: { name: 'Physical Inventory Final Quality Gate & End-to-End Lifecycle Suite (Phase 6H)', fn: runInventoryFinalGateTests },
   bulkImportFoundation: { name: 'Bulk Book Import Foundation & Validation Suite (Phase 7A)', fn: runBulkImportFoundationTests },
   bulkImportExecution: { name: 'Transactional Batch Import Execution Suite (Phase 7B)', fn: runBulkImportExecutionTests },
+  bulkImportUIWorkflow: { name: 'Librarian Bulk Import Modal & Workflow Suite (Phase 7C)', fn: runBulkImportUIWorkflowTests },
 };
 
 async function checkHealth(url) {

@@ -2,7 +2,7 @@
 
 ## Baseline Commit
 - **Committed Baseline (Phase 6G-6H)**: `1ffcbb5c672b213a38e67b52214b609e5bb844e0`
-- **Current Head**: Completing Phase 7B (Streaming File Ingestion & Transactional Batch Import)
+- **Current Head**: Completing Phase 7C (Librarian Import Modal, Preview Grid & Confirmation Workflow)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -43,18 +43,30 @@
   - Guarantees zero partial imports: any failed batch rolls back cleanly and cleans up prior batches from the run.
   - Emits administrative audit logs (`AUDIT_ACTIONS.BOOK_CREATED`) with `batchImport: true` and batch statistics.
   - Added full test suite `tests/suites/bulkImportExecution.test.js` with 51 verified assertions.
+- **Phase 7C**: Librarian Import Modal, Preview Grid & Confirmation Workflow (`bulkImportUIWorkflow.test.js` — 79 assertions).
+  - Created reusable `BulkImportModal` component in `client/src/components/librarian/BulkImportModal.tsx`.
+  - Added prominent "Bulk Import CSV" action button in `ManageBooks.tsx` action bar next to "Add New Book Title".
+  - Implemented drag-and-drop and file input upload zone enforcing `.csv` extension and 5MB client-side size boundaries.
+  - Added in-memory RFC 4180 parser and client-side pre-validator (`client/src/lib/csvHelper.ts`) for zero-latency local preview.
+  - Integrated server validation and database conflict detection via `POST /api/books/import/validate`.
+  - Built high-density, horizontal-scrolling preview table with row numbering, status badges, inline error diagnostics, search/filtering, and pagination.
+  - Added import summary metrics bar (total books, physical copies, unique ISBNs, barcodes, valid/error counts).
+  - Designed explicit two-step confirmation dialog with database modification warnings, summary statistics, and authorization checkbox.
+  - Integrated `POST /api/books/import/execute` via multipart `FormData`, duplicate submission prevention, loading indicators, and automatic catalog refresh.
+  - Extended `Modal.tsx` to support wide modals (`maxWidth="4xl" | "5xl" | "6xl"`).
+  - Added dedicated automated regression test suite `tests/suites/bulkImportUIWorkflow.test.js` with 79 verified assertions.
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 3 — In Progress (Phase 7: Bulk Data Operations & CSV Import Engine)
-- **Current Sub-Phase**: Phase 7B Complete
+- **Current Sub-Phase**: Phase 7C Complete
 - **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
 - **Working Tree**: Clean upon commit
-- **Verification Status**: 807/807 regression test assertions passing across 20 suites; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 886/886 regression test assertions passing across 21 suites; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
 ## Metrics Summary
-- **Total Test Suites**: 20
-- **Total Test Assertions**: 807 (807 Passed, 0 Failed, 0 Skipped, Duration: ~220s)
+- **Total Test Suites**: 21
+- **Total Test Assertions**: 886 (886 Passed, 0 Failed, 0 Skipped, Duration: ~275s)
 - **Database Engine**: Neon PostgreSQL (Serverless, branch: `production`)
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
 - **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC
@@ -83,6 +95,7 @@
 - **Inventory Final Gate Suite**: `npm run test:inventory-final-gate`
 - **Bulk Import Foundation Suite**: `npm run test:bulk-import-foundation`
 - **Bulk Import Execution Suite**: `npm run test:bulk-import-execution`
+- **Bulk Import UI & Workflow Suite**: `npm run test:bulk-import-ui`
 
 ## Next Up
-- Phase 7C: Librarian Import Modal, Preview Grid & Confirmation Workflow.
+- Phase 7D: Bulk Book Export Engine & Export Formats (CSV / Excel).

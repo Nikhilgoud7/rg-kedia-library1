@@ -145,3 +145,64 @@ export interface DashboardStats {
   overdueCount: number;
   todayIssued: number;
 }
+
+export interface BulkImportRowValidationError {
+  row: number;
+  column: string;
+  message: string;
+  value?: string;
+}
+
+export interface BulkImportSummary {
+  totalRows: number;
+  validRowCount: number;
+  errorRowCount: number;
+  totalBooks: number;
+  totalPhysicalCopies: number;
+  uniqueIsbns: number;
+  totalBarcodes: number;
+}
+
+export interface BulkImportValidationReport {
+  isValid: boolean;
+  totalRows: number;
+  validRows: any[];
+  errors: BulkImportRowValidationError[];
+  warnings: string[];
+  summary: BulkImportSummary;
+}
+
+export interface BulkImportDatabaseDuplicates {
+  existingIsbns: Array<{
+    row: number;
+    isbn: string;
+    existingBookId: string;
+    existingTitle: string;
+  }>;
+  existingBarcodes: Array<{
+    row: number;
+    barcode: string;
+    existingCopyId: string;
+    existingBookTitle: string;
+  }>;
+}
+
+export interface BulkImportValidationResponse {
+  isValid: boolean;
+  validation: BulkImportValidationReport;
+  databaseDuplicates: BulkImportDatabaseDuplicates;
+}
+
+export interface BulkImportExecutionResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  summary?: {
+    totalBooksImported: number;
+    totalCopiesImported: number;
+    totalBatches: number;
+    bookIds: string[];
+  };
+  databaseDuplicates?: BulkImportDatabaseDuplicates;
+  validation?: BulkImportValidationReport;
+}
