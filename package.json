@@ -44,7 +44,8 @@
     "test:bulk-import-ui": "node tests/runner.js --allow-tests --suite=bulkImportUIWorkflow",
     "test:bulk-import-final-gate": "node tests/runner.js --allow-tests --suite=bulkImportFinalGate",
     "test:bulk-export": "node tests/runner.js --allow-tests --suite=bulkExport",
-    "test:env-guard": "node tests/runner.js --allow-tests --suite=envGuardValidation"
+    "test:env-guard": "node tests/runner.js --allow-tests --suite=envGuardValidation",
+    "test:storage": "node tests/runner.js --allow-tests --suite=storageAdapter"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",
@@ -57,7 +58,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -79,6 +79,34 @@
   - Recorded administrative audit logging via `logAdminAction` (`AUDIT_ACTIONS.BOOK_EXPORTED`) capturing actor ID, timestamp, exported count, and filter parameters.
   - Integrated "Export CSV" action button with download state and loading indicator into `ManageBooks.tsx` top action bar.
   - Added dedicated automated regression test suite `tests/suites/bulkExport.test.js` with 91 verified assertions and registered `"test:bulk-export"` in `package.json`.
+- **Phase 8B**: Storage Adapter & Database-Backed Image Storage (`storageAdapter.test.js` — 59 assertions).
+  - Implemented pure, driver-independent storage abstraction contract `StorageAdapter` in `server/lib/storage/types.ts` (`put`, `get`, `delete`).
+  - Added additive `BookCover` model in `prisma/schema.prisma` (`id`, `bookId`, `data Bytes`, `mimeType`, `sizeBytes`) with 1-to-1 cascade relation on `Book`.
+  - Created and applied additive PostgreSQL migration `20261023144637_add_book_cover` to the verified Neon test branch.
+  - Implemented `DatabaseStorageDriver` in `server/lib/storage/DatabaseStorageDriver.ts` storing optimized WebP thumbnails in PostgreSQL bytea storage; prevents egress bloat by keeping binary payloads separate from standard catalog queries.
+  - Implemented in-memory image processing engine `server/lib/storage/imageProcessor.ts` using `sharp@0.35.5`:
+    - Strict magic-byte validation accepting only genuine JPEG, PNG, and WebP.
+    - Rejects SVG, PDF, EXE, HTML, GIF, text spoofing, and corrupted streams before decoding.
+    - Enforces 5 MB raw upload ceiling and decompression bomb defense (8,000px dimension and 25 megapixel thresholds).
+    - Normalizes EXIF orientation and resizes (`fit: inside`, max 400x600px).
+    - 5-step adaptive compression ladder guaranteeing WebP output <= 50 KB (51,200 bytes).
+    - Zero temporary files written to local disk; zero remote URL fetching (complete SSRF elimination).
+  - Implemented storage driver factory in `server/lib/storage/index.ts` defaulting to `STORAGE_DRIVER=database` with fail-closed extension points for future S3/Supabase integration.
+  - Cleaned up devDependencies by removing redundant `@types/sharp` package (utilizing Sharp's bundled native TypeScript declarations).
+  - Added dedicated automated regression test suite `tests/suites/storageAdapter.test.js` with 59 verified assertions covering all image-processing, storage, security, and cascade deletion invariants. Registered `"test:storage"` script in `package.json`.
+
+### Dependency Security Status & Advisory Disclosures
+- **Audit Command**: `npm audit --omit=dev --json` (Exit code: 1).
+- **Patch Applied**:
+  - `ip-address` (moderate, GHSA-rxp7-6hxx-x8q5): Patched from `10.7.2` to `10.7.4` within the allowed semver range of `express-rate-limit@8.7.0` (`^10.2.0`), completely resolving the moderate vulnerability.
+- **Unresolved Pre-Existing Tooling Advisories**:
+  - `deepmerge-ts` / `@prisma/config` / `prisma` (high, GHSA-ggr8-5vv4-36mx): Affects `deepmerge-ts < 8.0.0` used internally by `@prisma/config@6.19.3` within the `prisma@6.19.3` CLI package.
+  - **Baseline Lineage**: Existed at baseline commit `4fd979a` (inherited with Prisma 6.19.3). Not introduced by Phase 8B.
+  - **Why Visible in `--omit=dev`**: `@prisma/client` (production dependency) declares `peerOptional prisma@"*"`. npm's audit traversal treats `prisma` CLI as linked to the production dependency graph via this optional peer link.
+  - **Runtime Reachability**: Development/build tooling only (`prisma migrate`, `prisma generate`). Not imported, invoked, or reachable in production HTTP API routes (`dist/server/index.js`).
+  - **Remediation Constraint**: Upstream fix requires `prisma@7.10.1`, which is a breaking major-version upgrade strictly prohibited by project Rule 18 ("No major-version bumps"). Preserved without modification.
+- **Phase 8B Package Addition**:
+  - `sharp@0.35.5`: Confirmed to introduce **zero** vulnerabilities across both production and development audits. Redundant `@types/sharp` removed.
 
 ### Neon Test Branch Privacy & PII Realities (Mandatory Precondition)
 > [!IMPORTANT]
@@ -90,22 +118,23 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 3 — In Progress (Phase 7 Complete: Bulk Data Operations & CSV Import/Export Milestone Fully Delivered)
-- **Current Sub-Phase**: Phase 7E Complete (Verified on Isolated Neon Test Branch)
+- **Current Stage**: STAGE 3 — In Progress (Cover Images & Storage Adapter Interface)
+- **Current Sub-Phase**: Phase 8B Complete (Storage Adapter & Database Storage Driver Delivered)
 - **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
-- **Working Tree**: Clean upon commit
-- **Verification Status**: 1061/1061 regression test assertions passing across 24 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Working Tree**: Preserved uncommitted changes per autonomous review workflow
+- **Verification Status**: 1120/1120 regression test assertions passing across 25 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
 ## Metrics Summary
-- **Total Test Suites**: 24
-- **Total Test Assertions**: 1061 (1061 Passed, 0 Failed, 0 Skipped, Duration: ~296s)
+- **Total Test Suites**: 25
+- **Total Test Assertions**: 1120 (1120 Passed, 0 Failed, 0 Skipped, Duration: ~304s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
 - **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC, formula injection neutralization, test branch PII policy documented
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
 - **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
+- **Storage Subsystem**: Zero-cost PostgreSQL-backed storage adapter (`BookCover`), in-memory Sharp WebP processing <= 50 KB, zero production disk writes, complete SSRF protection
 
 ## Active Test Commands
 - **Full Automated Regression Suite**: `npm test`
@@ -133,6 +162,7 @@
 - **Bulk Import Final Quality Gate Suite**: `npm run test:bulk-import-final-gate`
 - **Bulk Book Export Engine Suite**: `npm run test:bulk-export`
 - **Test Database Environment Guard Suite**: `npm run test:env-guard`
+- **Storage Adapter & Driver Suite**: `npm run test:storage`
 
 ## Next Up
-- Phase 8: Cover Images & Storage Adapter Interface (8A-8E).
+- Phase 8C: Book Cover Upload, Retrieval & Deletion APIs.

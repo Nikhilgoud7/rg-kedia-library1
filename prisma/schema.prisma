@@ -63,6 +63,20 @@ model Book {
   copies       BookCopy[]
   requests     BookRequest[]
   bookPrograms BookProgram[]
+  cover        BookCover?
+}
+
+// Dedicated binary cover image storage
+model BookCover {
+  id        String   @id @default(uuid())
+  bookId    String   @unique
+  data      Bytes
+  mimeType  String   @default("image/webp")
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
 
 // Maps books to programs/branches they're relevant for

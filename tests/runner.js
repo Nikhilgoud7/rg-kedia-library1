@@ -25,6 +25,7 @@ import { runBulkImportUIWorkflowTests } from './suites/bulkImportUIWorkflow.test
 import { runBulkImportFinalGateTests } from './suites/bulkImportFinalGate.test.js';
 import { runBulkExportTests } from './suites/bulkExport.test.js';
 import { runEnvGuardValidationTests } from './suites/envGuardValidation.test.js';
+import { runStorageAdapterTests } from './suites/storageAdapter.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -51,6 +52,7 @@ const SUITES = {
   bulkImportFinalGate: { name: 'Bulk Book Import Final Quality Gate Suite (Phase 7D)', fn: runBulkImportFinalGateTests },
   bulkExport: { name: 'Bulk Book Export Engine Suite (Phase 7E)', fn: runBulkExportTests },
   envGuardValidation: { name: 'Test Database Environment Guard Validation Suite', fn: runEnvGuardValidationTests },
+  storageAdapter: { name: 'Storage Adapter & Database Storage Driver Suite (Phase 8B)', fn: runStorageAdapterTests },
 };
 
 async function checkHealth(url) {
