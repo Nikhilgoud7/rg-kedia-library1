@@ -23,6 +23,7 @@ import { runBulkImportFoundationTests } from './suites/bulkImportFoundation.test
 import { runBulkImportExecutionTests } from './suites/bulkImportExecution.test.js';
 import { runBulkImportUIWorkflowTests } from './suites/bulkImportUIWorkflow.test.js';
 import { runBulkImportFinalGateTests } from './suites/bulkImportFinalGate.test.js';
+import { runEnvGuardValidationTests } from './suites/envGuardValidation.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -47,6 +48,7 @@ const SUITES = {
   bulkImportExecution: { name: 'Transactional Batch Import Execution Suite (Phase 7B)', fn: runBulkImportExecutionTests },
   bulkImportUIWorkflow: { name: 'Librarian Bulk Import Modal & Workflow Suite (Phase 7C)', fn: runBulkImportUIWorkflowTests },
   bulkImportFinalGate: { name: 'Bulk Book Import Final Quality Gate Suite (Phase 7D)', fn: runBulkImportFinalGateTests },
+  envGuardValidation: { name: 'Test Database Environment Guard Validation Suite', fn: runEnvGuardValidationTests },
 };
 
 async function checkHealth(url) {
@@ -68,13 +70,14 @@ async function ensureServer(baseUrl, port) {
   console.log(`[runner] No server detected at ${baseUrl}. Launching background test server...`);
   const child = spawn('npx', ['tsx', 'server/index.ts'], {
     shell: true,
-    stdio: 'pipe',
+    stdio: 'inherit',
     env: {
       ...process.env,
       NODE_ENV: 'test',
       PORT: String(port),
       DATABASE_URL: process.env.DATABASE_URL,
       DIRECT_URL: process.env.DIRECT_URL,
+      DATABASE_URL_UNPOOLED: process.env.DATABASE_URL_UNPOOLED,
     },
   });
 

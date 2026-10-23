@@ -44,19 +44,32 @@ export class TestDataManager {
     const email = this.generateEmail(role, tag);
     const rollNumber = role === 'STUDENT' ? this.generateRollNumber(tag) : null;
 
-    const user = await this.prisma.user.create({
-      data: {
-        name: `Synthetic ${role} ${tag || this.sessionPrefix}`,
-        email,
-        password: hash,
-        role,
-        rollNumber,
-        program,
-        branch,
-        semester,
-        active,
-      },
-    });
+    let user;
+    let attempts = 0;
+    while (!user && attempts < 3) {
+      try {
+        attempts++;
+        user = await this.prisma.user.create({
+          data: {
+            name: `Synthetic ${role} ${tag || this.sessionPrefix}`,
+            email,
+            password: hash,
+            role,
+            rollNumber,
+            program,
+            branch,
+            semester,
+            active,
+          },
+        });
+      } catch (err) {
+        if (attempts < 3 && err.message?.includes("Can't reach database server")) {
+          await new Promise((r) => setTimeout(r, 2000));
+        } else {
+          throw err;
+        }
+      }
+    }
 
     this.createdUserIds.add(user.id);
     return {
@@ -86,22 +99,35 @@ export class TestDataManager {
       barcode: `BC-${this.sessionPrefix}-${crypto.randomBytes(3).toString('hex')}-${i + 1}`,
     }));
 
-    const book = await this.prisma.book.create({
-      data: {
-        title: uniqueTitle,
-        author,
-        segment,
-        category,
-        totalCopies,
-        availableCopies: totalCopies,
-        copies: {
-          create: copiesData,
-        },
-      },
-      include: {
-        copies: true,
-      },
-    });
+    let book;
+    let attempts = 0;
+    while (!book && attempts < 3) {
+      try {
+        attempts++;
+        book = await this.prisma.book.create({
+          data: {
+            title: uniqueTitle,
+            author,
+            segment,
+            category,
+            totalCopies,
+            availableCopies: totalCopies,
+            copies: {
+              create: copiesData,
+            },
+          },
+          include: {
+            copies: true,
+          },
+        });
+      } catch (err) {
+        if (attempts < 3 && err.message?.includes("Can't reach database server")) {
+          await new Promise((r) => setTimeout(r, 2000));
+        } else {
+          throw err;
+        }
+      }
+    }
 
     this.createdBookIds.add(book.id);
     book.copies.forEach((c) => this.createdCopyIds.add(c.id));

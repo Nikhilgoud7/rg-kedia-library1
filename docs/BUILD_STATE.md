@@ -56,32 +56,44 @@
   - Extended `Modal.tsx` to support wide modals (`maxWidth="4xl" | "5xl" | "6xl"`).
   - Added dedicated automated regression test suite `tests/suites/bulkImportUIWorkflow.test.js` with 79 verified assertions.
 
-- **Phase 7D**: Bulk Import Final Quality Gate (`bulkImportFinalGate.test.js` — 69 assertions).
+- **Phase 7D**: Bulk Import Final Quality Gate & Database Security Hardening (`bulkImportFinalGate.test.js` — 69 assertions, `envGuardValidation.test.js` — 15 assertions).
   - Hardened database conflict row attribution in `checkDatabaseDuplicates` (`server/lib/bulkImportValidation.ts`), returning `row: r.rowNumber`, conflicting identifiers, and existing database titles/IDs.
   - Updated `BulkImportModal.tsx` preview grid to highlight database-conflicting rows with badges and specific field collision callouts alongside file-level errors.
   - Achieved client/server validation parity in `client/src/lib/csvHelper.ts` for trailing blank rows, 4-digit publication years (`1000 <= year <= currentYear + 1`), integer `TotalCopies`, comma and semicolon copy delimiter support, and case-insensitive condition matching.
   - Fortified multi-batch compensating rollback in `server/lib/bulkImportService.ts` with atomic batch processing, cleanup tracking, and administrative audit logging (`AUDIT_ACTIONS.BOOK_DELETED` with `{ batchImport: true, rollback: true, cleanupSuccess: true, booksRemovedCount }`).
   - Restricted failure injection header `x-test-simulate-failure-batch` strictly to genuine automated test environments (`NODE_ENV === 'test' && !IS_PRODUCTION`). Completely ignored in production and standard runtime environments.
-  - Established a dedicated, isolated Neon PostgreSQL test branch (`test` branch, compute endpoint `ep-autumn-sky-b3vpykh4`), separated from the production branch (`ep-aged-sunset-b3548him`).
-  - Added fail-closed test environment guard in `tests/helpers/envGuard.js` that rejects execution if `TEST_DATABASE_URL` is missing, malformed, points to a known production endpoint, or ambiguously reuses the production connection.
-  - Added full test suite `tests/suites/bulkImportFinalGate.test.js` covering 16 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, failure injection security [invalid headers, negative values, production service-level gate], 5MB upload boundary, and recursive zero-secrets leakage scan).
-  - Registered suite in `tests/runner.js` and added `"test:bulk-import-final-gate"` script in `package.json`.
+  - Established a dedicated, isolated Neon PostgreSQL test branch (`test` branch, id: `br-plain-salad-b3qylt8r`, compute endpoint `ep-autumn-sky-b3vpykh4`), separated from the production branch (`ep-aged-sunset-b3548him`).
+  - Implemented fail-closed positive allowlist guard (`tests/helpers/envGuard.js` via `APPROVED_TEST_ENDPOINT_PATTERNS`), strictly rejecting all unapproved, production, unknown, missing, malformed, or ambient `.env` fallback databases.
+  - Added pure, non-database-mutating guard validation test suite (`tests/suites/envGuardValidation.test.js` — 15 assertions) verifying allowlist enforcement and zero secret leakage.
+  - Standardized direct compute routing and unpooled connection support (`DATABASE_URL_UNPOOLED`), ensuring reliable Prisma transactions, concurrency, and PostgreSQL advisory locking (`pg_advisory_xact_lock`).
+  - Built resilient transient retry handling in `tests/helpers/testData.js` for serverless compute wake-up latency.
+  - Added full end-to-end bulk import quality gate suite (`tests/suites/bulkImportFinalGate.test.js` — 69 assertions) covering 16 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, failure injection security, 5MB upload boundary, and recursive zero-secrets leakage scan).
+  - Registered suites in `tests/runner.js` and added `"test:bulk-import-final-gate"` and `"test:env-guard"` scripts in `package.json`.
+
+### Neon Test Branch Privacy & PII Realities (Mandatory Precondition)
+> [!IMPORTANT]
+> - **Branch Lineage**: The dedicated Neon test branch (`br-plain-salad-b3qylt8r`, compute endpoint `ep-autumn-sky-b3vpykh4`) was created via Neon console branching from `production` (`br-mute-term-b3q54934`) with `init_source: parent-data` at LSN `0/4CBEE10`.
+> - **Current Data State**: The test branch currently contains an exact cloned snapshot of the parent branch state at that moment, including seeded baseline accounts and records.
+> - **Sanitization Status**: The test branch has **NOT** been independently sanitized or anonymized with synthetic data masking.
+> - **Mandatory Precondition Before Production Onboarding**: Before any real student, teacher, or staff Personally Identifiable Information (PII) is onboarded into the production branch, the engineering team must satisfy either of the following requirements:
+>   1. Provision a schema-only branch (`init_source: parent-schema`) for all automated testing and external development; OR
+>   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 3 — In Progress (Phase 7: Bulk Data Operations & CSV Import Engine)
-- **Current Sub-Phase**: Phase 7D Complete (Hardened & Verified on Isolated Neon Test Branch)
+- **Current Sub-Phase**: Phase 7D Complete (Hardened, Allowlisted & Verified on Isolated Neon Test Branch)
 - **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
 - **Working Tree**: Clean upon commit
-- **Verification Status**: 955/955 regression test assertions passing across 22 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 970/970 regression test assertions passing across 23 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
 ## Metrics Summary
-- **Total Test Suites**: 22
-- **Total Test Assertions**: 955 (955 Passed, 0 Failed, 0 Skipped, Duration: ~253s)
+- **Total Test Suites**: 23
+- **Total Test Assertions**: 970 (970 Passed, 0 Failed, 0 Skipped, Duration: ~252s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
-- **Test Database Isolation**: Verified fail-closed guard preventing tests from running against production branch
+- **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
-- **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC
+- **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC, test branch PII policy documented
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
 - **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
 
@@ -99,7 +111,7 @@
 - **Exam Guide Suite**: `npm run test:exam-guide`
 - **Librarian Polish Suite**: `npm run test:librarian-polish`
 - **Copy Management Suite**: `npm run test:copy-management`
-- **Inventory Reconciliation Suite**: `npm run test:inventory-reconciliation`
+- **Inventory Reconciliation Suite**: `npm run test:reconciliation`
 - **Lost & Damaged Workflows Suite**: `npm run test:lost-damaged`
 - **Inventory Experience Suite**: `npm run test:inventory-experience`
 - **Inventory Circulation Suite**: `npm run test:inventory-circulation`
@@ -109,6 +121,7 @@
 - **Bulk Import Execution Suite**: `npm run test:bulk-import-execution`
 - **Bulk Import UI & Workflow Suite**: `npm run test:bulk-import-ui`
 - **Bulk Import Final Quality Gate Suite**: `npm run test:bulk-import-final-gate`
+- **Test Database Environment Guard Suite**: `npm run test:env-guard`
 
 ## Next Up
 - Phase 7E: Bulk Book Export Engine & Export Formats (CSV / Excel).
