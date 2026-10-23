@@ -238,6 +238,11 @@ export class TestDataManager {
           where: { targetId: { in: bookIds } },
         });
 
+        // Delete bookCover rows
+        await this.prisma.bookCover.deleteMany({
+          where: { bookId: { in: bookIds } },
+        });
+
         // Delete bookProgram curriculum mappings
         await this.prisma.bookProgram.deleteMany({
           where: { bookId: { in: bookIds } },

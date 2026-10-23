@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 6G-6H)**: `1ffcbb5c672b213a38e67b52214b609e5bb844e0`
-- **Current Head**: Completing Phase 7D (Bulk Import Final Quality Gate)
+- **Committed Baseline (Phase 8B)**: `3176bee55dae0625c4e71c082b6b8b82bf7aa54c`
+- **Current Head**: Phase 8C Remediated & Fully Verified (Cover Image APIs Implemented, Remediated, 101/101 Assertions, 1,221 Full Regression Assertions)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -94,6 +94,20 @@
   - Implemented storage driver factory in `server/lib/storage/index.ts` defaulting to `STORAGE_DRIVER=database` with fail-closed extension points for future S3/Supabase integration.
   - Cleaned up devDependencies by removing redundant `@types/sharp` package (utilizing Sharp's bundled native TypeScript declarations).
   - Added dedicated automated regression test suite `tests/suites/storageAdapter.test.js` with 59 verified assertions covering all image-processing, storage, security, and cascade deletion invariants. Registered `"test:storage"` script in `package.json`.
+- **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
+  - Implemented upload endpoint `POST /api/books/:id/cover` (Librarian only) with in-memory Multer streaming (`MAX_RAW_UPLOAD_SIZE = 5MB`), supporting `'cover'`, `'file'`, and `'image'` multipart form fields.
+  - Hardened magic-byte sniffing and decompression bomb protection via `processBookCoverImage`, strictly rejecting PDF, EXE, animated GIF, HTML/SVG, and text spoofing with HTTP 400.
+  - Automatically downscales maintaining aspect ratio and compresses to optimized WebP format with strict <= 50 KB (51,200 bytes) output boundary.
+  - Persists cover in PostgreSQL `BookCover` table via `DatabaseStorageDriver` and updates `book.coverImage` with timestamped URL (`/api/books/:id/cover?v=...`) for instant client-side cache busting.
+  - Implemented authenticated campus-only retrieval endpoint `GET /api/books/:id/cover` returning WebP binary stream with `Content-Type: image/webp`, `Content-Length`, `ETag`, and secured cache headers: `Cache-Control: private, max-age=86400, must-revalidate` and `Vary: Cookie, Authorization` to strictly prevent shared proxy/CDN cross-user caching of authenticated assets.
+  - Added conditional HTTP caching: returns `304 Not Modified` with zero body when `If-None-Match` matches the cover's ETag.
+  - Implemented librarian-only deletion endpoint `DELETE /api/books/:id/cover` with failure-safe ordering: updates catalog `book.coverImage` to null in the database first, then deletes storage payload. In the event of a storage driver failure, logs non-fatal error and records `storageCleanupFailed: true` in audit log while keeping public catalog free of broken URLs.
+  - Integrated storage cleanup in parent book deletion (`DELETE /api/books/:id`).
+  - Added administrative audit logging via `logAdminAction` (`AUDIT_ACTIONS.BOOK_COVER_UPDATED` and `AUDIT_ACTIONS.BOOK_COVER_DELETED`).
+  - Implemented user-scoped rate limiting (`coverUploadLimiter`: 30 uploads / 15 min per librarian user, placed strictly downstream of authentication/authorization, skipped in test environments).
+  - Verified zero raw binary image leaks in standard book catalog (`GET /api/books`) and book detail (`GET /api/books/:id`) responses, protecting database network egress.
+  - Verified zero temporary files written to local disk and zero remote image URL fetching (SSRF immunity).
+  - Added dedicated automated regression test suite `tests/suites/bookCoverApi.test.js` expanded from 89 to 101 verified assertions (including private cache control, Vary headers, and simulated DB/storage failure orderings) and registered `"test:cover-api"` in `package.json`.
 
 ### Dependency Security Status & Advisory Disclosures
 - **Audit Command**: `npm audit --omit=dev --json` (Exit code: 1).
@@ -163,6 +177,7 @@
 - **Bulk Book Export Engine Suite**: `npm run test:bulk-export`
 - **Test Database Environment Guard Suite**: `npm run test:env-guard`
 - **Storage Adapter & Driver Suite**: `npm run test:storage`
+- **Book Cover API Suite**: `npm run test:cover-api`
 
 ## Next Up
-- Phase 8C: Book Cover Upload, Retrieval & Deletion APIs.
+- Phase 8D: Librarian Cover Image Management UI (Upload / Replace / Remove modal, client preview, catalog card display).

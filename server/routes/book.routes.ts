@@ -18,6 +18,12 @@ import {
 } from '../lib/bulkImportValidation.js';
 import { executeBulkBookImport } from '../lib/bulkImportService.js';
 import { IS_PRODUCTION, NODE_ENV } from '../config.js';
+import { rateLimit } from 'express-rate-limit';
+import {
+  getStorageAdapter,
+  processBookCoverImage,
+  MAX_RAW_UPLOAD_SIZE,
+} from '../lib/storage/index.js';
 
 const router = Router();
 
@@ -52,6 +58,67 @@ const handleImportUpload = (req: AuthRequest, res: Response, next: NextFunction)
     if (err) {
       res.status(400).json({ error: err.message || 'File upload error.' });
       return;
+    }
+    next();
+  });
+};
+
+/**
+ * Rate limiter for cover uploads: 30 uploads per 15 minutes per authenticated librarian.
+ *
+ * Middleware Execution Order & Key Security Guarantee:
+ * This limiter is mounted as:
+ *   router.post('/:id/cover', authenticate, authorize('LIBRARIAN'), coverUploadLimiter, handleCoverUpload, ...)
+ *
+ * Because `authenticate` and `authorize('LIBRARIAN')` execute BEFORE this middleware:
+ * 1. Unauthenticated requests are immediately rejected with HTTP 401 before touching this limiter.
+ * 2. Non-librarian roles (students, teachers) are rejected with HTTP 403 before touching this limiter.
+ * 3. Therefore, `req.user` is strictly guaranteed to be present and populated with the authenticated librarian's record.
+ * 4. `req.user.id` provides the true per-librarian rate-limiting partition.
+ * 5. The 'librarian' fallback is a defensive guard ensuring express-rate-limit receives a non-empty key without IPv6 validation issues.
+ * 6. Skipped in automated test environments (`NODE_ENV === 'test' || ALLOW_TESTS === 'true'`).
+ */
+const coverUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'librarian',
+  statusCode: 429,
+  message: { error: 'Too many cover upload requests. Please try again after 15 minutes.' },
+  skip: () => process.env.NODE_ENV === 'test' || process.env.ALLOW_TESTS === 'true',
+});
+
+// In-memory Multer for safe book cover processing (zero permanent disk writes)
+const coverUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_RAW_UPLOAD_SIZE },
+});
+
+const handleCoverUpload = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return next();
+  }
+
+  coverUpload.any()(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'File content exceeds maximum allowed size of 5MB.' });
+        return;
+      }
+      res.status(400).json({ error: `Upload error: ${err.message}` });
+      return;
+    }
+    if (err) {
+      res.status(400).json({ error: err.message || 'File upload error.' });
+      return;
+    }
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (files && files.length > 0) {
+      const match = files.find((f) => ['cover', 'file', 'image'].includes(f.fieldname)) || files[0];
+      req.file = match;
     }
     next();
   });
@@ -404,6 +471,205 @@ router.post('/:id/reconcile', authenticate, authorize('LIBRARIAN'), async (req: 
   }
 });
 
+// POST /api/books/:id/cover - Upload or replace book cover image (Librarian only)
+router.post(
+  '/:id/cover',
+  authenticate,
+  authorize('LIBRARIAN'),
+  coverUploadLimiter,
+  handleCoverUpload,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const book = await prisma.book.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!book) {
+        res.status(404).json({ error: 'Book not found.' });
+        return;
+      }
+
+      if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+        res.status(400).json({
+          error: 'No cover image file provided. Please upload an image under "cover", "file", or "image" field.',
+        });
+        return;
+      }
+
+      let processed;
+      try {
+        processed = await processBookCoverImage(req.file.buffer);
+      } catch (err: any) {
+        res.status(400).json({ error: err.message || 'Image processing failed.' });
+        return;
+      }
+
+      const storage = getStorageAdapter();
+      const storageKey = `covers/books/${book.id}.webp`;
+      const result = await storage.put(storageKey, processed.buffer, {
+        mimeType: 'image/webp',
+        sizeBytes: processed.sizeBytes,
+        bookId: book.id,
+        originalName: req.file.originalname,
+      });
+
+      const coverUrl = `/api/books/${book.id}/cover?v=${Date.now()}`;
+      const updatedBook = await prisma.book.update({
+        where: { id: book.id },
+        data: { coverImage: coverUrl },
+      });
+
+      await logAdminAction({
+        actorId: req.user!.id,
+        action: AUDIT_ACTIONS.BOOK_COVER_UPDATED,
+        targetId: book.id,
+        details: {
+          bookTitle: book.title,
+          isbn: book.isbn,
+          sizeBytes: processed.sizeBytes,
+          mimeType: 'image/webp',
+          width: processed.width,
+          height: processed.height,
+          etag: result.etag,
+        },
+      });
+
+      res.json({
+        message: 'Book cover updated successfully.',
+        coverUrl: updatedBook.coverImage,
+        sizeBytes: processed.sizeBytes,
+        mimeType: 'image/webp',
+        width: processed.width,
+        height: processed.height,
+        etag: result.etag,
+      });
+    } catch (error: any) {
+      console.error('Cover upload error:', error);
+      res.status(500).json({ error: 'Server error uploading book cover.' });
+    }
+  }
+);
+
+// GET /api/books/:id/cover - Retrieve book cover image (Authenticated campus users)
+router.get('/:id/cover', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const book = await prisma.book.findUnique({
+      where: { id: req.params.id },
+      select: { id: true },
+    });
+
+    if (!book) {
+      res.status(404).json({ error: 'Book not found.' });
+      return;
+    }
+
+    const storage = getStorageAdapter();
+    const cover = await storage.get(`covers/books/${req.params.id}.webp`);
+
+    if (!cover || !cover.data) {
+      res.status(404).json({ error: 'Cover image not found for this book.' });
+      return;
+    }
+
+    if (cover.etag) {
+      const clientEtag = req.headers['if-none-match'];
+      if (clientEtag) {
+        const cleanClient = clientEtag.trim().replace(/^W\//, '');
+        const cleanServer = cover.etag.trim().replace(/^W\//, '');
+        if (cleanClient === cleanServer || clientEtag.trim() === cover.etag.trim()) {
+          res.status(304).end();
+          return;
+        }
+      }
+    }
+
+    res.setHeader('Content-Type', cover.mimeType || 'image/webp');
+    res.setHeader('Content-Length', cover.sizeBytes);
+    if (cover.etag) {
+      res.setHeader('ETag', cover.etag);
+    }
+    res.setHeader('Cache-Control', 'private, max-age=86400, must-revalidate');
+    res.setHeader('Vary', 'Cookie, Authorization');
+    res.status(200).send(cover.data);
+  } catch (error: any) {
+    console.error('Cover retrieval error:', error);
+    res.status(500).json({ error: 'Server error retrieving book cover.' });
+  }
+});
+
+// DELETE /api/books/:id/cover - Delete book cover image (Librarian only)
+router.delete('/:id/cover', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const book = await prisma.book.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!book) {
+      res.status(404).json({ error: 'Book not found.' });
+      return;
+    }
+
+    // Test seam: strictly scoped to automated test mode (!IS_PRODUCTION && NODE_ENV === 'test')
+    if (process.env.NODE_ENV === 'test' && !IS_PRODUCTION && req.headers['x-test-simulate-db-update-failure'] === 'true') {
+      throw new Error('SIMULATED_DB_UPDATE_FAILURE: Simulated database failure updating book record.');
+    }
+
+    // Step 1: Ensure database catalog no longer advertises a cover URL first.
+    // Clearing the public-facing reference first guarantees that no broken image links
+    // remain visible to students or faculty if storage cleanup encounters an error.
+    const hadCover = Boolean(book.coverImage);
+    if (hadCover) {
+      await prisma.book.update({
+        where: { id: book.id },
+        data: { coverImage: null },
+      });
+    }
+
+    // Step 2: Remove the stored image payload from the storage driver.
+    // If storage cleanup fails, we do NOT restore a broken URL. We log the failure for administrative cleanup.
+    let storageCleanupError: Error | null = null;
+    const storage = getStorageAdapter();
+    try {
+      if (process.env.NODE_ENV === 'test' && !IS_PRODUCTION && req.headers['x-test-simulate-storage-delete-failure'] === 'true') {
+        throw new Error('SIMULATED_STORAGE_DELETE_FAILURE: Simulated storage driver failure deleting cover object.');
+      }
+      await storage.delete(`covers/books/${book.id}.webp`);
+    } catch (storageErr: any) {
+      storageCleanupError = storageErr;
+      console.error(
+        `[CoverDelete] Non-fatal error cleaning up stored cover for book ${book.id} (${book.title}):`,
+        storageErr.message || storageErr
+      );
+    }
+
+    // Step 3: Record administrative audit log
+    await logAdminAction({
+      actorId: req.user!.id,
+      action: AUDIT_ACTIONS.BOOK_COVER_DELETED,
+      targetId: book.id,
+      details: {
+        bookTitle: book.title,
+        isbn: book.isbn,
+        previousCoverUrl: book.coverImage,
+        storageCleanupFailed: Boolean(storageCleanupError),
+        storageError: storageCleanupError?.message || null,
+      },
+    });
+
+    if (storageCleanupError) {
+      res.status(200).json({
+        message: 'Book cover reference cleared from catalog; storage cleanup encountered an error.',
+        warning: 'Storage object cleanup failed and may require administrative cleanup.',
+      });
+      return;
+    }
+
+    res.json({ message: 'Book cover deleted successfully.' });
+  } catch (error: any) {
+    console.error('Cover delete error:', error);
+    res.status(500).json({ error: 'Server error deleting book cover.' });
+  }
+});
 // GET /api/books/:id - Book details
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -615,6 +881,14 @@ router.delete('/:id', authenticate, authorize('LIBRARIAN'), async (req: AuthRequ
       });
     });
 
+    // Cleanup cover from storage adapter
+    const storage = getStorageAdapter();
+    try {
+      await storage.delete(`covers/books/${req.params.id}.webp`);
+    } catch (storageErr) {
+      console.warn('Non-fatal error cleaning up book cover from storage during book deletion:', storageErr);
+    }
+
     res.json({ message: 'Book deleted successfully.' });
   } catch (error) {
     console.error('Delete book error:', error);
@@ -760,7 +1034,7 @@ router.post('/:id/copies', authenticate, authorize('LIBRARIAN'), async (req: Aut
       });
 
       return inserted;
-    });
+    }, { timeout: 15000, maxWait: 10000 });
 
     res.status(201).json({
       copies: createdCopies,
