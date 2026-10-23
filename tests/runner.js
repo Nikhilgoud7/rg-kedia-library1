@@ -23,6 +23,7 @@ import { runBulkImportFoundationTests } from './suites/bulkImportFoundation.test
 import { runBulkImportExecutionTests } from './suites/bulkImportExecution.test.js';
 import { runBulkImportUIWorkflowTests } from './suites/bulkImportUIWorkflow.test.js';
 import { runBulkImportFinalGateTests } from './suites/bulkImportFinalGate.test.js';
+import { runBulkExportTests } from './suites/bulkExport.test.js';
 import { runEnvGuardValidationTests } from './suites/envGuardValidation.test.js';
 
 const SUITES = {
@@ -48,6 +49,7 @@ const SUITES = {
   bulkImportExecution: { name: 'Transactional Batch Import Execution Suite (Phase 7B)', fn: runBulkImportExecutionTests },
   bulkImportUIWorkflow: { name: 'Librarian Bulk Import Modal & Workflow Suite (Phase 7C)', fn: runBulkImportUIWorkflowTests },
   bulkImportFinalGate: { name: 'Bulk Book Import Final Quality Gate Suite (Phase 7D)', fn: runBulkImportFinalGateTests },
+  bulkExport: { name: 'Bulk Book Export Engine Suite (Phase 7E)', fn: runBulkExportTests },
   envGuardValidation: { name: 'Test Database Environment Guard Validation Suite', fn: runEnvGuardValidationTests },
 };
 

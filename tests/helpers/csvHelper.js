@@ -19,13 +19,20 @@ export const BULK_IMPORT_COLUMNS = [
 
 export function sanitizeCsvField(value) {
   if (value === null || value === undefined) return '';
-  const str = String(value).trim();
-  if (str.length === 0) return '';
+  const raw = String(value);
+  if (raw.length === 0) return '';
+
   const triggerChars = ['=', '+', '-', '@', '\t', '\r'];
-  if (triggerChars.includes(str.charAt(0))) {
-    return `'${str}`;
+  if (triggerChars.includes(raw.charAt(0))) {
+    return `'${raw.trim()}`;
   }
-  return str;
+
+  const trimmed = raw.trim();
+  if (trimmed.length > 0 && triggerChars.includes(trimmed.charAt(0))) {
+    return `'${trimmed}`;
+  }
+
+  return trimmed;
 }
 
 export function formatCsvValue(value) {

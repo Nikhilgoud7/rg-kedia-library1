@@ -10,6 +10,7 @@ import {
 } from '../lib/inventoryReconciliation.js';
 
 import { generateBookImportTemplateCsv } from '../lib/bulkImportFormat.js';
+import { generateBooksExportCsv } from '../lib/bulkExportService.js';
 import {
   validateBulkImportCsv,
   checkDatabaseDuplicates,
@@ -185,6 +186,42 @@ router.get('/import/template', authenticate, authorize('LIBRARIAN'), async (_req
   } catch (error) {
     console.error('Template generation error:', error);
     res.status(500).json({ error: 'Server error generating import template.' });
+  }
+});
+
+// GET /api/books/export - Export book catalogue with physical copies and programs (Librarian only)
+router.get('/export', authenticate, authorize('LIBRARIAN'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const filters = {
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      category: typeof req.query.category === 'string' ? req.query.category : undefined,
+      segment: typeof req.query.segment === 'string' ? req.query.segment : undefined,
+      program: typeof req.query.program === 'string' ? req.query.program : undefined,
+    };
+
+    const { csvContent, count } = await generateBooksExportCsv(prisma, filters);
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `rgkedia-books-export-${dateStr}.csv`;
+
+    // Audit log the export action
+    await logAdminAction({
+      actorId: req.user!.id,
+      action: AUDIT_ACTIONS.BOOK_EXPORTED,
+      details: {
+        count,
+        filters,
+        format: 'CSV',
+      },
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Book export error:', error);
+    res.status(500).json({ error: 'Server error generating catalogue export.' });
   }
 });
 

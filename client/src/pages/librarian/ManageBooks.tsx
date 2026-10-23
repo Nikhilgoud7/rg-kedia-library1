@@ -22,6 +22,8 @@ import {
   PackagePlus,
   MinusCircle,
   FileSpreadsheet,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import BulkImportModal from '../../components/librarian/BulkImportModal';
@@ -55,6 +57,51 @@ export const ManageBooks: React.FC = () => {
 
   // Reconciliation State
   const [reconcilingBookId, setReconcilingBookId] = useState<string | null>(null);
+
+  // Export State
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Handle catalog CSV export
+  const handleExportCatalog = async () => {
+    try {
+      setIsExporting(true);
+      const params: Record<string, string> = {};
+      if (search.trim()) params.search = search.trim();
+      if (selectedSegment) params.segment = selectedSegment;
+      if (selectedProgram) params.program = selectedProgram;
+
+      const res = await api.get('/books/export', {
+        params,
+        responseType: 'blob',
+      });
+
+      let filename = `rgkedia-books-export-${new Date().toISOString().split('T')[0]}.csv`;
+      const disposition = res.headers['content-disposition'];
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Catalogue exported successfully!');
+    } catch (err: any) {
+      console.error('Export catalogue error:', err);
+      toast.error(err.response?.data?.error || 'Failed to export catalogue.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Handle single-book inventory reconciliation
   const handleReconcileBook = async (bookId: string, bookTitle: string) => {
@@ -250,6 +297,19 @@ export const ManageBooks: React.FC = () => {
           >
             <FileSpreadsheet className="w-4 h-4 text-amber-400" />
             <span>Bulk Import CSV</span>
+          </button>
+          <button
+            onClick={handleExportCatalog}
+            disabled={isExporting}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs rounded-xl shadow-xs transition disabled:opacity-50"
+            aria-label="Export Book Catalogue as CSV"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-600" />
+            )}
+            <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
           <button
             onClick={() => {

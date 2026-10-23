@@ -43,6 +43,7 @@
     "test:bulk-import-execution": "node tests/runner.js --allow-tests --suite=bulkImportExecution",
     "test:bulk-import-ui": "node tests/runner.js --allow-tests --suite=bulkImportUIWorkflow",
     "test:bulk-import-final-gate": "node tests/runner.js --allow-tests --suite=bulkImportFinalGate",
+    "test:bulk-export": "node tests/runner.js --allow-tests --suite=bulkExport",
     "test:env-guard": "node tests/runner.js --allow-tests --suite=envGuardValidation"
   },
   "dependencies": {

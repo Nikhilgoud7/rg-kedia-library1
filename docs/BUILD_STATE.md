@@ -69,6 +69,16 @@
   - Built resilient transient retry handling in `tests/helpers/testData.js` for serverless compute wake-up latency.
   - Added full end-to-end bulk import quality gate suite (`tests/suites/bulkImportFinalGate.test.js` — 69 assertions) covering 16 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, failure injection security, 5MB upload boundary, and recursive zero-secrets leakage scan).
   - Registered suites in `tests/runner.js` and added `"test:bulk-import-final-gate"` and `"test:env-guard"` scripts in `package.json`.
+- **Phase 7E**: Bulk Book Export Engine & Export Formats (`bulkExport.test.js` — 91 assertions).
+  - Implemented librarian-only export endpoint `GET /api/books/export` with role authorization gate (`authorize('LIBRARIAN')`).
+  - Delivered exact 14-column format parity with Phase 7A `BULK_IMPORT_COLUMNS` (`Title`, `Author`, `ISBN`, `Publisher`, `Edition`, `PublicationYear`, `Category`, `Segment`, `Description`, `TotalCopies`, `ShelfLocation`, `Barcodes`, `CopyConditions`, `Programs`), ensuring 100% round-trip re-importability.
+  - Formatted multiple physical copies into comma-delimited barcodes (`BC-1, BC-2`), copy conditions (`Good, Fair`), and semicolon-delimited curriculum program mappings (`BCOM:General; BBA`).
+  - Hardened formula injection protection (`sanitizeCsvField`) to neutralize spreadsheet macro execution for all formula trigger characters (`=`, `+`, `-`, `@`, `\t`, `\r`), prefixing with single quotes (`'`).
+  - Integrated UTF-8 Byte Order Mark (`\uFEFF`) and CRLF line endings for native Microsoft Excel and Google Sheets parity with 100% Unicode byte fidelity (Devanagari, Telugu, Sanskrit diacritics).
+  - Supported selective filtering consistent with catalog browsing (`search`, `category`, `segment`, `program`).
+  - Recorded administrative audit logging via `logAdminAction` (`AUDIT_ACTIONS.BOOK_EXPORTED`) capturing actor ID, timestamp, exported count, and filter parameters.
+  - Integrated "Export CSV" action button with download state and loading indicator into `ManageBooks.tsx` top action bar.
+  - Added dedicated automated regression test suite `tests/suites/bulkExport.test.js` with 91 verified assertions and registered `"test:bulk-export"` in `package.json`.
 
 ### Neon Test Branch Privacy & PII Realities (Mandatory Precondition)
 > [!IMPORTANT]
@@ -80,20 +90,20 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 3 — In Progress (Phase 7: Bulk Data Operations & CSV Import Engine)
-- **Current Sub-Phase**: Phase 7D Complete (Hardened, Allowlisted & Verified on Isolated Neon Test Branch)
+- **Current Stage**: STAGE 3 — In Progress (Phase 7 Complete: Bulk Data Operations & CSV Import/Export Milestone Fully Delivered)
+- **Current Sub-Phase**: Phase 7E Complete (Verified on Isolated Neon Test Branch)
 - **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
 - **Branch Status**: `main`
 - **Working Tree**: Clean upon commit
-- **Verification Status**: 970/970 regression test assertions passing across 23 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 1061/1061 regression test assertions passing across 24 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
 
 ## Metrics Summary
-- **Total Test Suites**: 23
-- **Total Test Assertions**: 970 (970 Passed, 0 Failed, 0 Skipped, Duration: ~252s)
+- **Total Test Suites**: 24
+- **Total Test Assertions**: 1061 (1061 Passed, 0 Failed, 0 Skipped, Duration: ~296s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
-- **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC, test branch PII policy documented
+- **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC, formula injection neutralization, test branch PII policy documented
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
 - **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
 
@@ -121,7 +131,8 @@
 - **Bulk Import Execution Suite**: `npm run test:bulk-import-execution`
 - **Bulk Import UI & Workflow Suite**: `npm run test:bulk-import-ui`
 - **Bulk Import Final Quality Gate Suite**: `npm run test:bulk-import-final-gate`
+- **Bulk Book Export Engine Suite**: `npm run test:bulk-export`
 - **Test Database Environment Guard Suite**: `npm run test:env-guard`
 
 ## Next Up
-- Phase 7E: Bulk Book Export Engine & Export Formats (CSV / Excel).
+- Phase 8: Cover Images & Storage Adapter Interface (8A-8E).
