@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../lib/api';
 import { Book, Lending } from '../../types';
 import Modal from '../../components/common/Modal';
+import BookCoverImage from '../../components/common/BookCoverImage';
 import {
   Search,
   BookOpen,
@@ -403,11 +404,21 @@ export const TeacherBrowseBooks: React.FC = () => {
                   books.map((book) => (
                     <tr key={book.id} className="hover:bg-slate-50 transition">
                       <td className="py-3.5 px-4 max-w-sm">
-                        <div className="font-bold text-slate-900 text-sm">{book.title}</div>
-                        <div className="text-slate-500 font-medium">by {book.author}</div>
-                        {book.isbn && (
-                          <div className="text-[10px] text-slate-400 font-mono">ISBN: {book.isbn}</div>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <BookCoverImage
+                            coverUrl={book.coverImage}
+                            title={book.title}
+                            author={book.author}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{book.title}</div>
+                            <div className="text-slate-500 font-medium truncate">by {book.author}</div>
+                            {book.isbn && (
+                              <div className="text-[10px] text-slate-400 font-mono truncate">ISBN: {book.isbn}</div>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -522,16 +533,27 @@ export const TeacherBrowseBooks: React.FC = () => {
         maxWidth="2xl"
       >
         <div className="space-y-4 text-xs">
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-            <div>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex gap-4 items-center">
+            <BookCoverImage
+              coverUrl={bookDetail?.coverImage}
+              title={bookDetail?.title || ''}
+              author={bookDetail?.author}
+              size="md"
+            />
+            <div className="flex-1 space-y-1">
+              <h4 className="font-bold text-slate-900 text-base leading-snug">{bookDetail?.title}</h4>
               <p className="text-slate-500">Author: <strong>{bookDetail?.author}</strong></p>
               <p className="text-slate-500">Segment: <strong>{bookDetail?.segment}</strong></p>
-            </div>
-            <div className="text-right">
-              <span className="font-bold text-slate-800">
-                {bookDetail?.availableCopies} of {bookDetail?.totalCopies} Copies Free
-              </span>
-              <p className="text-slate-400 font-mono">Location: {bookDetail?.shelfLocation}</p>
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="font-bold text-slate-800">
+                  {bookDetail?.availableCopies} of {bookDetail?.totalCopies} Copies Free
+                </span>
+                {bookDetail?.shelfLocation && (
+                  <span className="text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Location: {bookDetail.shelfLocation}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

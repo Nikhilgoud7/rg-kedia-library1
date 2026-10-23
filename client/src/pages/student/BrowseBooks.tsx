@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import { Book } from '../../types';
 import BookCard from '../../components/common/BookCard';
+import BookCoverImage from '../../components/common/BookCoverImage';
 import Modal from '../../components/common/Modal';
 import {
   Search,
@@ -436,16 +437,26 @@ export const BrowseBooks: React.FC = () => {
         maxWidth="md"
       >
         <form onSubmit={handleRequestBorrow} className="space-y-4 text-xs">
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
-            <h4 className="font-bold text-slate-900 text-sm">{selectedBook?.title}</h4>
-            <p className="text-slate-500">by {selectedBook?.author}</p>
-            <div className="pt-2 flex items-center justify-between text-[11px]">
-              <span className="font-semibold text-emerald-600">
-                {selectedBook?.availableCopies} of {selectedBook?.totalCopies} Copies In Stock
-              </span>
-              <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                {selectedBook?.shelfLocation}
-              </span>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex gap-4 items-center">
+            <BookCoverImage
+              coverUrl={selectedBook?.coverImage}
+              title={selectedBook?.title || ''}
+              author={selectedBook?.author}
+              size="md"
+            />
+            <div className="flex-1 space-y-1">
+              <h4 className="font-bold text-slate-900 text-sm leading-snug">{selectedBook?.title}</h4>
+              <p className="text-slate-500 font-medium">by {selectedBook?.author}</p>
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="font-semibold text-emerald-600">
+                  {selectedBook?.availableCopies} of {selectedBook?.totalCopies} Copies In Stock
+                </span>
+                {selectedBook?.shelfLocation && (
+                  <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Shelf: {selectedBook?.shelfLocation}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

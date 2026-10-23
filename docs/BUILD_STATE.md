@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 8B)**: `3176bee55dae0625c4e71c082b6b8b82bf7aa54c`
-- **Current Head**: Phase 8C Remediated & Fully Verified (Cover Image APIs Implemented, Remediated, 101/101 Assertions, 1,221 Full Regression Assertions)
+- **Committed Baseline (Phase 8C)**: `d9b9e96228aa2917c7e890d00f68cb79c453e310`
+- **Current Head**: Phase 8D Completed (Frontend Cover Image Integration Implemented, 58 UI Workflow Assertions, 1,279 Total Regression Assertions)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -109,6 +109,25 @@
   - Verified zero temporary files written to local disk and zero remote image URL fetching (SSRF immunity).
   - Added dedicated automated regression test suite `tests/suites/bookCoverApi.test.js` expanded from 89 to 101 verified assertions (including private cache control, Vary headers, and simulated DB/storage failure orderings) and registered `"test:cover-api"` in `package.json`.
 
+- **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
+  - Created reusable `BookCoverImage` component in `client/src/components/common/BookCoverImage.tsx`:
+    - Renders WebP cover image using authenticated `/api/books/:id/cover?v=...` URLs with timestamped cache-busting.
+    - Graceful fallback: switches immediately to elegant college placeholder on HTTP 404 or image load error (zero broken-image icons).
+    - Supports multiple size configurations: `sm` (table rows), `md` (cards and modals), `lg` (management workspace), and `full`.
+    - Screen-reader accessible with informative alt text, decorative book spine texture, and loading skeleton indicator.
+  - Created `BookCoverModal` component in `client/src/components/librarian/BookCoverModal.tsx`:
+    - Dedicated librarian modal for viewing current cover, uploading, replacing, and removing book cover artwork.
+    - Client-side usability checks: validates JPEG, PNG, and WebP formats and enforces 5 MB upload ceiling before network transmission.
+    - Zero-latency local preview via `URL.createObjectURL` displaying file name, size, and dimensions, with reliable resource cleanup via `URL.revokeObjectURL`.
+    - Upload / replacement via `POST /api/books/:id/cover` using multipart `FormData`.
+    - Destructive removal via `DELETE /api/books/:id/cover` with explicit confirmation dialog and warning indicators.
+    - Duplicate submission prevention, loading indicators, and informative inline error banners.
+  - Integrated `BookCoverImage` into `BookCard.tsx` for Student catalog browsing, search results, and library cards.
+  - Integrated `BookCoverImage` and `BookCoverModal` into `ManageBooks.tsx` (Librarian table view with interactive thumbnail and action button).
+  - Integrated `BookCoverImage` into `TeacherBrowseBooks.tsx` (table view and copy tracking detail modal).
+  - Integrated `BookCoverImage` into Student `BrowseBooks.tsx` borrow request confirmation modal.
+  - Added dedicated automated regression test suite `tests/suites/bookCoverUIWorkflow.test.js` with 58 verified assertions and registered `"test:cover-ui"` in `package.json`.
+
 ### Dependency Security Status & Advisory Disclosures
 - **Audit Command**: `npm audit --omit=dev --json` (Exit code: 1).
 - **Patch Applied**:
@@ -178,6 +197,7 @@
 - **Test Database Environment Guard Suite**: `npm run test:env-guard`
 - **Storage Adapter & Driver Suite**: `npm run test:storage`
 - **Book Cover API Suite**: `npm run test:cover-api`
+- **Book Cover UI Workflow Suite**: `npm run test:cover-ui`
 
 ## Next Up
-- Phase 8D: Librarian Cover Image Management UI (Upload / Replace / Remove modal, client preview, catalog card display).
+- Phase 8E: Production Deployment & Verification.

@@ -24,9 +24,12 @@ import {
   FileSpreadsheet,
   Download,
   Loader2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import BulkImportModal from '../../components/librarian/BulkImportModal';
+import BookCoverImage from '../../components/common/BookCoverImage';
+import BookCoverModal from '../../components/librarian/BookCoverModal';
 
 export const ManageBooks: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -57,6 +60,19 @@ export const ManageBooks: React.FC = () => {
 
   // Reconciliation State
   const [reconcilingBookId, setReconcilingBookId] = useState<string | null>(null);
+
+  // Cover Management Modal State
+  const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
+  const [selectedBookForCover, setSelectedBookForCover] = useState<Book | null>(null);
+
+  const handleCoverUpdated = (bookId: string, newCoverUrl: string | null) => {
+    setBooks((prev) =>
+      prev.map((b) => (b.id === bookId ? { ...b, coverImage: newCoverUrl } : b))
+    );
+    if (selectedBookForCover && selectedBookForCover.id === bookId) {
+      setSelectedBookForCover((prev) => (prev ? { ...prev, coverImage: newCoverUrl } : null));
+    }
+  };
 
   // Export State
   const [isExporting, setIsExporting] = useState(false);
@@ -505,9 +521,33 @@ export const ManageBooks: React.FC = () => {
                 books.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50 transition">
                     <td className="py-3.5 px-4 max-w-xs">
-                      <div className="font-bold text-slate-900 text-sm leading-snug">{b.title}</div>
-                      <div className="text-slate-500 mt-0.5 font-medium">by {b.author}</div>
-                      {b.isbn && <div className="text-[10px] text-slate-400 font-mono mt-0.5">ISBN: {b.isbn}</div>}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBookForCover(b);
+                            setIsCoverModalOpen(true);
+                          }}
+                          className="shrink-0 group/cover relative cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-amber-500 rounded-lg transition"
+                          title="Click to view or change book cover"
+                          aria-label={`Manage cover for ${b.title}`}
+                        >
+                          <BookCoverImage
+                            coverUrl={b.coverImage}
+                            title={b.title}
+                            author={b.author}
+                            size="sm"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 rounded-lg flex items-center justify-center transition text-white">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                          </div>
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{b.title}</div>
+                          <div className="text-slate-500 mt-0.5 font-medium truncate">by {b.author}</div>
+                          {b.isbn && <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">ISBN: {b.isbn}</div>}
+                        </div>
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -560,6 +600,17 @@ export const ManageBooks: React.FC = () => {
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => {
+                            setSelectedBookForCover(b);
+                            setIsCoverModalOpen(true);
+                          }}
+                          title="Manage Book Cover"
+                          aria-label={`Manage cover image for ${b.title}`}
+                          className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleOpenEdit(b)}
                           title="Edit Book Details"
@@ -1024,6 +1075,14 @@ export const ManageBooks: React.FC = () => {
         isOpen={isBulkImportModalOpen}
         onClose={() => setIsBulkImportModalOpen(false)}
         onSuccess={() => fetchBooks(page)}
+      />
+
+      {/* Book Cover Artwork Management Modal */}
+      <BookCoverModal
+        isOpen={isCoverModalOpen}
+        onClose={() => setIsCoverModalOpen(false)}
+        book={selectedBookForCover}
+        onCoverUpdated={handleCoverUpdated}
       />
     </div>
   );

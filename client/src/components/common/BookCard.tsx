@@ -1,6 +1,7 @@
 import React from 'react';
 import { Book } from '../../types';
 import { BookOpen, MapPin, Tag, CheckCircle2, XCircle, ArrowRight, UserCheck } from 'lucide-react';
+import BookCoverImage from './BookCoverImage';
 
 interface BookCardProps {
   book: Book;
@@ -53,17 +54,29 @@ export const BookCard: React.FC<BookCardProps> = ({
           </span>
         </div>
 
-        {/* Title and Author */}
-        <h3 className="font-bold text-slate-900 text-base leading-snug group-hover:text-amber-600 transition">
-          {book.title}
-        </h3>
-        <p className="text-xs text-slate-500 font-medium mt-1">by {book.author}</p>
+        {/* Book Cover and Core Information */}
+        <div className="flex gap-3.5 mb-3">
+          <div className="shrink-0">
+            <BookCoverImage
+              coverUrl={book.coverImage}
+              title={book.title}
+              author={book.author}
+              size="md"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-slate-900 text-sm leading-snug group-hover:text-amber-600 transition line-clamp-2">
+              {book.title}
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-1 truncate">by {book.author}</p>
 
-        {/* Publication & Edition Details */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-          {book.publisher && <span>{book.publisher}</span>}
-          {book.edition && <span>• {book.edition}</span>}
-          {book.isbn && <span className="font-mono text-[11px]">• ISBN: {book.isbn}</span>}
+            {/* Publication & Edition Details */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+              {book.publisher && <span className="truncate max-w-[120px]">{book.publisher}</span>}
+              {book.edition && <span>• {book.edition}</span>}
+              {book.isbn && <span className="font-mono text-[10px] block w-full mt-0.5 truncate">ISBN: {book.isbn}</span>}
+            </div>
+          </div>
         </div>
 
         {/* Shelf Location */}
