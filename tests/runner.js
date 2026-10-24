@@ -32,6 +32,7 @@ import { runDataExportTests } from './suites/dataExport.test.js';
 import { runMandatoryPasswordChangeTests } from './suites/mandatoryPasswordChange.test.js';
 import { runBackupRecoveryTests } from './suites/backupRecovery.test.js';
 import { runSyntheticCohortTests } from './suites/syntheticCohort.test.js';
+import { runMigrationSimulationTests } from './suites/migrationSimulation.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -65,6 +66,7 @@ const SUITES = {
   mandatoryPasswordChange: { name: 'Mandatory First-Login Password Change Suite (Phase 9B)', fn: runMandatoryPasswordChangeTests },
   backupRecovery: { name: 'Automated Backup & Disaster Recovery Suite (Phase 9C)', fn: runBackupRecoveryTests },
   syntheticCohort: { name: 'Synthetic User Cohort Validation & Secure Credential Suite (Phase 9D)', fn: runSyntheticCohortTests },
+  migrationSimulation: { name: 'Staging Dry-Run, Migration Simulation & Rollback Suite (Phase 9E)', fn: runMigrationSimulationTests },
 };
 
 async function checkHealth(url) {

@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 9C)**: `14a754145a16c32b81c5893206f73ee4af7418c0`
-- **Current Head**: Phase 9D Implemented & Verified (Synthetic User Cohort Validation & Secure Credential Generator, 1,547 Total Regression Assertions Across 31 Suites)
+- **Committed Baseline (Phase 9D)**: `469f9181b43ce12e25c0551f5b1011156284dc39`
+- **Current Head**: Phase 9E Implemented & Verified (Staging Dry-Run, Production Migration Simulation & Rollback Readiness, 1,618 Total Regression Assertions Across 32 Suites)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -38,6 +38,15 @@
 - **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
 - **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
 - **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9E**: Staging Dry-Run, Production Migration Simulation & Rollback Readiness (`migrationSimulation.test.js` — 71 assertions).
+  - Staging Dry-Run Engine: Implemented `server/lib/migration/dryRunEngine.ts` providing pure non-mutating validation and in-database conflict detection. Analyzes proposed cohorts against existing database state, classifying operations into `INSERT`, `SKIP` (idempotent), and `CONFLICT` (`EMAIL_ALREADY_EXISTS_WITH_DIFFERENT_ROLL`, `ROLL_ALREADY_EXISTS_WITH_DIFFERENT_EMAIL`, `DATABASE_FIELD_MISMATCH`). Confirms mathematical parity between pre- and post-analysis database record counts (zero-mutation guarantee).
+  - Pre-Migration Backup Enforcement: Enforces mandatory creation and integrity verification of client-side AES-256-GCM encrypted backups (`RG_KEDIA_ENCRYPTED_BACKUP_V1`) prior to executing simulation mutations against the isolated test database.
+  - Transactional Simulation Engine: Implemented `server/lib/migration/simulationEngine.ts` executing cohort ingestion inside atomic Prisma transactions (`prisma.$transaction`, 60-second timeout). Automatically generates bcrypt password hashes with mandatory first-login password change enforcement (`mustChangePassword: true`) and records an append-only administrative audit log (`MIGRATION_SIMULATION_EXECUTED`) with batch tracking.
+  - Strict Idempotency: Verified that re-running identical migration cohorts yields 0 duplicate insertions, skips existing records cleanly, and produces zero database count drift.
+  - Transactional Batch Rollback Engine: Implemented `server/lib/migration/rollbackEngine.ts` providing safe reverse-deletion of simulated migration batches inside an atomic transaction, complete with active book loan dependency guards (`DEPENDENCY_CONFLICT`), mathematical reconciliation, and audit logging (`MIGRATION_ROLLBACK_EXECUTED`).
+  - Operational Documentation: Created `docs/MIGRATION_RUNBOOK_AND_ROLLBACK.md` specifying staging dry-run protocols, simulation lifecycles, 4-layer defense-in-depth rollback model, zero-PII compliance standards, and operator pre-migration checklists.
+  - CLI Utilities: Created `scripts/simulateMigration.ts` supporting `--dry-run`, `--execute`, `--rollback`, `--batch-id`, `--input`, `--generate-synthetic`, `--backup-key`, and `--json`. Registered `"migration:simulate"` in `package.json`.
+  - Dedicated Automated Test Suite: Added `tests/suites/migrationSimulation.test.js` (71 assertions) verifying target database safety guards, non-mutation guarantees, conflict matrices, pre-migration backup enforcement, transactional atomicity, idempotency, failure aborts, batch rollback, active loan dependency blocking, and guaranteed synthetic data cleanup. Registered `"test:migration"` in `package.json`.
 - **Phase 9D**: Synthetic User Cohort Validation & Secure Credential Generator (`syntheticCohort.test.js` — 74 assertions).
   - Validation Engine: Implemented `server/lib/cohort/cohortValidator.ts` supporting in-memory records, JSON string arrays, and RFC 4180 CSV inputs. Validates role constraints (`STUDENT`, `TEACHER`, `LIBRARIAN`), student roll numbers (`^\d{10,12}$` or `^RGK\d{4,8}$`), academic programs (`BCOM`, `BBA`, `BSC`), second languages, Indian mobile phone numbers, and cross-field academic consistency (Year 1: Sem 1–2, Year 2: Sem 3–4, Year 3: Sem 5–6).
   - Intra-Cohort & Database Duplicate Detection: Detects intra-cohort email and roll number duplicates with precise line/row attribution, and performs non-destructive database conflict checks against the isolated test database endpoint (`ep-autumn-sky-b3vpykh4`).
@@ -173,15 +182,15 @@
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
-- **Current Sub-Phase**: Phase 9D Complete (Synthetic User Cohort Validation & Secure Credential Generator)
-- **Gate 4 Status**: In Progress (Phase 9D Audited and Approved — Committing & Pushing)
+- **Current Sub-Phase**: Phase 9E Complete (Staging Dry-Run, Production Migration Simulation & Rollback Readiness Verified)
+- **Gate 4 Status**: In Progress (Phase 9E Complete — Ready for Independent Audit)
 - **Branch Status**: `main`
-- **Working Tree**: Committing verified Phase 9D implementation
-- **Verification Status**: 1,547 / 1,547 regression test assertions passing across 31 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Working Tree**: Preserved uncommitted changes for independent audit per project standards
+- **Verification Status**: 1,618 / 1,618 regression test assertions passing across 32 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 31
-- **Total Test Assertions**: 1547 (1547 Passed, 0 Failed, 0 Skipped, Duration: ~420s)
+- **Total Test Suites**: 32
+- **Total Test Assertions**: 1618 (1618 Passed, 0 Failed, 0 Skipped, Duration: ~354s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
@@ -223,7 +232,9 @@
 - **Book Cover UI Workflow Suite**: `npm run test:cover-ui`
 - **Automated Backup & Disaster Recovery Suite**: `npm run test:backup`
 - **Synthetic User Cohort & Secure Credential Suite**: `npm run test:cohort`
+- **Staging Dry-Run, Migration Simulation & Rollback Suite**: `npm run test:migration`
+- **CLI Migration Simulation Utility**: `npm run migration:simulate`
 
 ## Next Up
-- Phase 9D: Complete, audited (Approved), committed & pushed
-- Phase 9E: Staging Dry-Run & Production Migration Simulation
+- Phase 9E: Complete, audited (Approved), awaiting commit & push authorization
+- Phase 9F: Real Data Import Tooling / Production Cutover Readiness & Gate 4

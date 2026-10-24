@@ -25,6 +25,7 @@
     "backup:restore": "tsx scripts/restore.ts",
     "cohort:validate": "tsx scripts/validateCohort.ts",
     "credentials:generate": "tsx scripts/generateCredentials.ts",
+    "migration:simulate": "tsx scripts/simulateMigration.ts",
     "test": "node tests/runner.js --allow-tests",
     "test:auth": "node tests/runner.js --allow-tests --suite=auth",
     "test:authorization": "node tests/runner.js --allow-tests --suite=authorization",
@@ -56,7 +57,8 @@
     "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport",
     "test:password-change": "node tests/runner.js --allow-tests --suite=mandatoryPasswordChange",
     "test:backup": "node tests/runner.js --allow-tests --suite=backupRecovery",
-    "test:cohort": "node tests/runner.js --allow-tests --suite=syntheticCohort"
+    "test:cohort": "node tests/runner.js --allow-tests --suite=syntheticCohort",
+    "test:migration": "node tests/runner.js --allow-tests --suite=migrationSimulation"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",
