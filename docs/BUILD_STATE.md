@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 8C)**: `d9b9e96228aa2917c7e890d00f68cb79c453e310`
-- **Current Head**: Phase 8D Completed (Frontend Cover Image Integration Implemented, 58 UI Workflow Assertions, 1,279 Total Regression Assertions)
+- **Committed Baseline (Phase 8D)**: `74c0a0b198ac5e6a18f1ef71066dd46b099f3221`
+- **Current Head**: Phase 8E & Gate 3 Completed (Full Integration Verified, 1,279 Total Regression Assertions Across 27 Suites, Gate 3 Passed)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -128,17 +128,27 @@
   - Integrated `BookCoverImage` into Student `BrowseBooks.tsx` borrow request confirmation modal.
   - Added dedicated automated regression test suite `tests/suites/bookCoverUIWorkflow.test.js` with 58 verified assertions and registered `"test:cover-ui"` in `package.json`.
 
+- **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites).
+  - Executed full architecture audit across Prisma `BookCover` schema, `DatabaseStorageDriver`, `imageProcessor`, storage factory, book cover API routes, audit logs, and frontend role integrations (`BookCoverImage`, `BookCoverModal`, `BookCard`).
+  - Re-verified strict security boundary: unauthenticated requests receive 401; student/teacher uploads and deletes receive 403; librarian actions authorized.
+  - Re-verified image upload defenses: magic byte sniffing, 5 MB payload limit, 8,000px / 25M pixel decompression bomb limits, adaptive compression <= 50 KB WebP output, zero disk writes, complete SSRF immunity.
+  - Re-verified caching & retrieval: `Cache-Control: private, max-age=86400, must-revalidate`, `Vary: Cookie, Authorization`, ETag conditional HTTP 304 Not Modified, zero binary leaks in catalog APIs.
+  - Re-verified storage resiliency: in-place upserting, cascade deletion on parent book delete, failure-safe deletion order (catalog URL cleared first), and zero paid cloud storage dependencies.
+  - All 27 regression suites passed cleanly (1,279 / 1,279 assertions, duration: ~305s).
+  - Gate 3 Passed. Stage 3 (Phases 6, 7, 8) complete.
+
 ### Dependency Security Status & Advisory Disclosures
-- **Audit Command**: `npm audit --omit=dev --json` (Exit code: 1).
-- **Patch Applied**:
+- **Audit Command**: `npm audit --omit=dev --json` (Exit code: 1, tooling-only Prisma advisory remaining).
+- **Patches Applied**:
   - `ip-address` (moderate, GHSA-rxp7-6hxx-x8q5): Patched from `10.7.2` to `10.7.4` within the allowed semver range of `express-rate-limit@8.7.0` (`^10.2.0`), completely resolving the moderate vulnerability.
+  - `body-parser` (high, GHSA-27r3-jxmh-p828): Patched from `1.20.8` to `1.20.9` within the allowed semver range of `express@4.22.3` (`~1.20.5`), completely resolving the high-severity Denial of Service vulnerability via trailing bytes on compressed request bodies with zero breaking changes.
 - **Unresolved Pre-Existing Tooling Advisories**:
   - `deepmerge-ts` / `@prisma/config` / `prisma` (high, GHSA-ggr8-5vv4-36mx): Affects `deepmerge-ts < 8.0.0` used internally by `@prisma/config@6.19.3` within the `prisma@6.19.3` CLI package.
-  - **Baseline Lineage**: Existed at baseline commit `4fd979a` (inherited with Prisma 6.19.3). Not introduced by Phase 8B.
+  - **Baseline Lineage**: Existed at baseline commit `4fd979a` (inherited with Prisma 6.19.3). Not introduced by Phase 8.
   - **Why Visible in `--omit=dev`**: `@prisma/client` (production dependency) declares `peerOptional prisma@"*"`. npm's audit traversal treats `prisma` CLI as linked to the production dependency graph via this optional peer link.
   - **Runtime Reachability**: Development/build tooling only (`prisma migrate`, `prisma generate`). Not imported, invoked, or reachable in production HTTP API routes (`dist/server/index.js`).
   - **Remediation Constraint**: Upstream fix requires `prisma@7.10.1`, which is a breaking major-version upgrade strictly prohibited by project Rule 18 ("No major-version bumps"). Preserved without modification.
-- **Phase 8B Package Addition**:
+- **Phase 8 Package Additions**:
   - `sharp@0.35.5`: Confirmed to introduce **zero** vulnerabilities across both production and development audits. Redundant `@types/sharp` removed.
 
 ### Neon Test Branch Privacy & PII Realities (Mandatory Precondition)
@@ -151,16 +161,16 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 3 — In Progress (Cover Images & Storage Adapter Interface)
-- **Current Sub-Phase**: Phase 8B Complete (Storage Adapter & Database Storage Driver Delivered)
-- **Gate 3 Status**: Stage 3 Midpoint Cleared; Gate 3 will follow Phase 8
+- **Current Stage**: STAGE 3 — Completed (Real Inventory, Bulk Import, Cover Images)
+- **Current Sub-Phase**: Phase 8E Complete (Full Integration & Quality Gate Verified)
+- **Gate 3 Status**: **GATE 3 PASSED** (All Phase 6, 7, and 8 requirements verified)
 - **Branch Status**: `main`
 - **Working Tree**: Preserved uncommitted changes per autonomous review workflow
-- **Verification Status**: 1120/1120 regression test assertions passing across 25 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors).
+- **Verification Status**: 1,279 / 1,279 regression test assertions passing across 27 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 25
-- **Total Test Assertions**: 1120 (1120 Passed, 0 Failed, 0 Skipped, Duration: ~304s)
+- **Total Test Suites**: 27
+- **Total Test Assertions**: 1279 (1279 Passed, 0 Failed, 0 Skipped, Duration: ~305s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
