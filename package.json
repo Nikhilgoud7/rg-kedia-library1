@@ -23,6 +23,8 @@
     "backup:create": "tsx scripts/backup.ts",
     "backup:verify": "tsx scripts/verifyBackup.ts",
     "backup:restore": "tsx scripts/restore.ts",
+    "cohort:validate": "tsx scripts/validateCohort.ts",
+    "credentials:generate": "tsx scripts/generateCredentials.ts",
     "test": "node tests/runner.js --allow-tests",
     "test:auth": "node tests/runner.js --allow-tests --suite=auth",
     "test:authorization": "node tests/runner.js --allow-tests --suite=authorization",
@@ -53,7 +55,8 @@
     "test:cover-ui": "node tests/runner.js --allow-tests --suite=bookCoverUIWorkflow",
     "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport",
     "test:password-change": "node tests/runner.js --allow-tests --suite=mandatoryPasswordChange",
-    "test:backup": "node tests/runner.js --allow-tests --suite=backupRecovery"
+    "test:backup": "node tests/runner.js --allow-tests --suite=backupRecovery",
+    "test:cohort": "node tests/runner.js --allow-tests --suite=syntheticCohort"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

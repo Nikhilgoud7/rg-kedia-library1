@@ -31,6 +31,7 @@ import { runBookCoverUIWorkflowTests } from './suites/bookCoverUIWorkflow.test.j
 import { runDataExportTests } from './suites/dataExport.test.js';
 import { runMandatoryPasswordChangeTests } from './suites/mandatoryPasswordChange.test.js';
 import { runBackupRecoveryTests } from './suites/backupRecovery.test.js';
+import { runSyntheticCohortTests } from './suites/syntheticCohort.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -63,6 +64,7 @@ const SUITES = {
   dataExport: { name: 'Personal Data Export & DPDP Compliance Suite (Phase 9A)', fn: runDataExportTests },
   mandatoryPasswordChange: { name: 'Mandatory First-Login Password Change Suite (Phase 9B)', fn: runMandatoryPasswordChangeTests },
   backupRecovery: { name: 'Automated Backup & Disaster Recovery Suite (Phase 9C)', fn: runBackupRecoveryTests },
+  syntheticCohort: { name: 'Synthetic User Cohort Validation & Secure Credential Suite (Phase 9D)', fn: runSyntheticCohortTests },
 };
 
 async function checkHealth(url) {

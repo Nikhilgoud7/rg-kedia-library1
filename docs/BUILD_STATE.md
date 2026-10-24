@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 9B)**: `f60ece2706014e748ef4aa6bded1c80bdbbb6090`
-- **Current Head**: Phase 9C Remediated & Hardened (Automated Backup & Disaster Recovery Fully Verified, 1,473 Total Regression Assertions Across 30 Suites)
+- **Committed Baseline (Phase 9C)**: `14a754145a16c32b81c5893206f73ee4af7418c0`
+- **Current Head**: Phase 9D Implemented & Verified (Synthetic User Cohort Validation & Secure Credential Generator, 1,547 Total Regression Assertions Across 31 Suites)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -38,6 +38,15 @@
 - **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
 - **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
 - **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9D**: Synthetic User Cohort Validation & Secure Credential Generator (`syntheticCohort.test.js` — 74 assertions).
+  - Validation Engine: Implemented `server/lib/cohort/cohortValidator.ts` supporting in-memory records, JSON string arrays, and RFC 4180 CSV inputs. Validates role constraints (`STUDENT`, `TEACHER`, `LIBRARIAN`), student roll numbers (`^\d{10,12}$` or `^RGK\d{4,8}$`), academic programs (`BCOM`, `BBA`, `BSC`), second languages, Indian mobile phone numbers, and cross-field academic consistency (Year 1: Sem 1–2, Year 2: Sem 3–4, Year 3: Sem 5–6).
+  - Intra-Cohort & Database Duplicate Detection: Detects intra-cohort email and roll number duplicates with precise line/row attribution, and performs non-destructive database conflict checks against the isolated test database endpoint (`ep-autumn-sky-b3vpykh4`).
+  - DPDP Zero-PII Compliance: Produces structured summary reports with role distributions, academic metrics, and error codes without leaking plain personal identifiers or secrets in terminal logs or summary objects.
+  - Repository Boundary Enforcement (`SEC-9D-01`): Implemented `validateCredentialOutputPath` in `server/lib/cohort/credentialGenerator.ts` strictly prohibiting writing test credentials inside or equal to the repository root directory (`CREDENTIAL_OUTPUT_INSIDE_REPO_FORBIDDEN`).
+  - High-Entropy Credential Generation: Generates 16-character cryptographically uniform random passwords (`crypto.randomInt` / `Fisher-Yates`) with uppercase, lowercase, numeric, and special character diversity, strictly obeying bcrypt's 72-byte limit and enforcing `mustChangePassword: true` on all generated accounts.
+  - Overwrite Protection & File Permissions: Enforces overwrite protection (fails closed without explicit `--overwrite` flag) and sets owner-only file permissions (`0o600`).
+  - CLI Utilities: Created `scripts/validateCohort.ts` (`npm run cohort:validate`) and `scripts/generateCredentials.ts` (`npm run credentials:generate`).
+  - Dedicated Automated Test Suite: Added `tests/suites/syntheticCohort.test.js` (74 assertions) verifying boundary enforcement, entropy, bcrypt verification, overwrite protection, academic consistency, role restrictions, CSV/JSON parsing, DB collisions, and end-to-end first-login lifecycle drills. Registered `"test:cohort"` in `package.json`.
 - **Phase 9C**: Automated Backup & Disaster Recovery (`backupRecovery.test.js` — 52 assertions, expanded from 45 following remediation loop).
   - Audit Condition Remediation:
     - `SEC-9C-01` (Key Derivation Hardening): Replaced arbitrary passphrase hashing in `server/lib/backup/cryptoUtils.ts` with strict enforcement of 64-character hexadecimal keys (256-bit entropy). Enforces explicit rejection of non-hex strings, whitespace, and arbitrary passphrases without silent hashing to eliminate offline brute-force vulnerability.
@@ -164,15 +173,15 @@
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
-- **Current Sub-Phase**: Phase 9B Complete (Mandatory First-Login Password Change Verified)
-- **Gate 4 Status**: In Progress (Phase 9B Complete — Ready for Independent Audit)
+- **Current Sub-Phase**: Phase 9D Complete (Synthetic User Cohort Validation & Secure Credential Generator)
+- **Gate 4 Status**: In Progress (Phase 9D Audited and Approved — Committing & Pushing)
 - **Branch Status**: `main`
-- **Working Tree**: Preserved uncommitted changes for independent audit per project standards
-- **Verification Status**: 1,421 / 1,421 regression test assertions passing across 29 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Working Tree**: Committing verified Phase 9D implementation
+- **Verification Status**: 1,547 / 1,547 regression test assertions passing across 31 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 29
-- **Total Test Assertions**: 1421 (1421 Passed, 0 Failed, 0 Skipped, Duration: ~384s)
+- **Total Test Suites**: 31
+- **Total Test Assertions**: 1547 (1547 Passed, 0 Failed, 0 Skipped, Duration: ~420s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
@@ -212,7 +221,9 @@
 - **Storage Adapter & Driver Suite**: `npm run test:storage`
 - **Book Cover API Suite**: `npm run test:cover-api`
 - **Book Cover UI Workflow Suite**: `npm run test:cover-ui`
+- **Automated Backup & Disaster Recovery Suite**: `npm run test:backup`
+- **Synthetic User Cohort & Secure Credential Suite**: `npm run test:cohort`
 
 ## Next Up
-- Phase 9B: Independent Integrity Audit
-- Phase 9C: Backup, Disaster Recovery & High-Availability Verification
+- Phase 9D: Complete, audited (Approved), committed & pushed
+- Phase 9E: Staging Dry-Run & Production Migration Simulation
