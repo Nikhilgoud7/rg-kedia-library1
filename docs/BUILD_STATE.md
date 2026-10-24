@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 8E)**: `92b788ac241b736411156b4c65e9fe28f0508884`
-- **Current Head**: Phase 9A Remediated (Privacy Framework & Personal Data Export Verified, 1,373 Total Regression Assertions Across 28 Suites)
+- **Committed Baseline (Phase 9A)**: `8ed6f2248f9eb7b3be76d60707d417c1efdd81b2`
+- **Current Head**: Phase 9B Completed (Mandatory First-Login Password Change Verified, 1,421 Total Regression Assertions Across 29 Suites)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -38,6 +38,15 @@
 - **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
 - **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
 - **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9B**: Mandatory First-Login Password Change (`mandatoryPasswordChange.test.js` — 48 assertions).
+  - Schema Enhancement: Added `mustChangePassword Boolean @default(false)` to `User` model in `prisma/schema.prisma`.
+  - Additive Migration: Created and deployed `20261024073600_add_must_change_password` to isolated Neon test branch (`ep-autumn-sky-b3vpykh4`), defaulting existing users to `false` (zero unexpected lockouts).
+  - Server-Side Enforcement Middleware: In `server/middleware/auth.ts`, intercepted requests from flagged users (`mustChangePassword: true`), blocking access to protected library features (`/api/books`, `/api/lending`, `/api/user/data-export`, `/api/admin`, etc.) with HTTP 403 `PASSWORD_CHANGE_REQUIRED`.
+  - Minimum Permitted Endpoints: Permitted only `/api/auth/me` and `/api/user/profile` (status identification), `/api/auth/change-password` (password update), and `/api/auth/logout` (session termination).
+  - Secure Password Change Workflow: In `server/routes/auth.routes.ts` (`PUT /api/auth/change-password`), validates current password via bcrypt, enforces minimum 8 characters and byte length <= 72, verifies new password differs from current, atomically updates password hash with `mustChangePassword: false`, increments `tokenVersion`, invalidates prior sessions, and issues a refreshed JWT cookie with clean profile payload.
+  - Profile Tampering Immunity: Added `mustChangePassword` to `PROTECTED_FIELDS` in `server/routes/user.routes.ts`, preventing unprivileged manipulation via profile update API.
+  - Frontend First-Login Flow: Created `MandatoryPasswordChangePage.tsx` with responsive design, policy validation checklist, and accessible inputs; integrated route guard in `App.tsx` and redirection in `LoginPage.tsx` and `api.ts` axios interceptor.
+  - Dedicated Automated Test Suite: Added `tests/suites/mandatoryPasswordChange.test.js` (48 assertions) covering default persistence, access blocking, minimum permitted routes, validation rules, atomic clearance, session invalidation, cross-user IDOR immunity, and teacher/librarian persona coverage. Registered `"test:password-change"` in `package.json`.
 - **Phase 9A**: Privacy Framework & Personal Data Export (`dataExport.test.js` — 94 assertions, expanded from 69 following Phase 9A remediation loop).
   - Authored institutional privacy compliance standard in `docs/DPDP_COMPLIANCE.md` under India's Digital Personal Data Protection Act, 2023 (DPDP Act).
   - Documented complete personal data inventory, processing purposes, legal grounds, and strict persona access boundaries.
@@ -139,15 +148,15 @@
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
-- **Current Sub-Phase**: Phase 9A Remediated (Privacy Framework & Personal Data Export Verified)
-- **Gate 4 Status**: In Progress (Phase 9A Remediated — Ready for Independent Re-Audit)
+- **Current Sub-Phase**: Phase 9B Complete (Mandatory First-Login Password Change Verified)
+- **Gate 4 Status**: In Progress (Phase 9B Complete — Ready for Independent Audit)
 - **Branch Status**: `main`
-- **Working Tree**: Preserved uncommitted changes for independent re-audit per project standards
-- **Verification Status**: 1,373 / 1,373 regression test assertions passing across 28 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Working Tree**: Preserved uncommitted changes for independent audit per project standards
+- **Verification Status**: 1,421 / 1,421 regression test assertions passing across 29 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 28
-- **Total Test Assertions**: 1373 (1373 Passed, 0 Failed, 0 Skipped, Duration: ~310s)
+- **Total Test Suites**: 29
+- **Total Test Assertions**: 1421 (1421 Passed, 0 Failed, 0 Skipped, Duration: ~384s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
@@ -161,6 +170,7 @@
 - **Authentication Suite**: `npm run test:auth`
 - **Role Authorization Suite**: `npm run test:authorization`
 - **Personal Data Export & DPDP Suite**: `npm run test:data-export`
+- **Mandatory Password Change Suite**: `npm run test:password-change`
 - **Lending Policy Suite**: `npm run test:lending`
 - **PostgreSQL Concurrency Suite**: `npm run test:concurrency`
 - **Notification Suite**: `npm run test:notification`
@@ -188,5 +198,5 @@
 - **Book Cover UI Workflow Suite**: `npm run test:cover-ui`
 
 ## Next Up
-- Phase 9A: Independent Integrity Re-Audit
-- Phase 9B: Mandatory First-Login Password Change & Expired Credentials Flow
+- Phase 9B: Independent Integrity Audit
+- Phase 9C: Backup, Disaster Recovery & High-Availability Verification

@@ -17,6 +17,7 @@ export interface User {
   secondLanguage?: SecondLanguage | null;
   phone?: string | null;
   active: boolean;
+  mustChangePassword?: boolean;
   createdAt: string;
   _count?: {
     lendings?: number;

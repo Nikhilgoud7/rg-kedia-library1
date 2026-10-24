@@ -27,6 +27,15 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    if (
+      error.response &&
+      error.response.status === 403 &&
+      error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED'
+    ) {
+      if (window.location.pathname !== '/change-password') {
+        window.location.href = '/change-password';
+      }
+    }
     return Promise.reject(error);
   }
 );

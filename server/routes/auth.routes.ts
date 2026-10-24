@@ -169,7 +169,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response): 
       return;
     }
 
-    const { name, email, password, role, rollNumber, program, branch, year, semester, secondLanguage, phone } = req.body;
+    const { name, email, password, role, rollNumber, program, branch, year, semester, secondLanguage, phone, mustChangePassword } = req.body;
 
     if (!name || !email || !password || !role) {
       res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -209,6 +209,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response): 
         semester: semester ? parseInt(semester) : null,
         secondLanguage: secondLanguage || null,
         phone: phone || null,
+        mustChangePassword: mustChangePassword !== undefined ? Boolean(mustChangePassword) : false,
       },
     });
 
@@ -230,6 +231,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
         rollNumber: true, program: true, branch: true,
         year: true, semester: true, secondLanguage: true,
         phone: true, active: true, createdAt: true,
+        mustChangePassword: true,
       },
     });
     res.json({ user });
@@ -299,19 +301,31 @@ router.put('/change-password', authenticate, changePasswordLimiter, async (req: 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: req.user!.id },
-      data: { password: hashedPassword, tokenVersion: { increment: 1 } },
+      data: {
+        password: hashedPassword,
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 },
+      },
     });
 
-    // Clear the auth cookie — user must log in again with the new password
-    res.clearCookie('rg_kedia_token', {
+    // Issue a refreshed JWT token with the new tokenVersion
+    const token = jwt.sign({ id: updatedUser.id, v: updatedUser.tokenVersion }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
+
+    res.cookie('rg_kedia_token', token, {
       httpOnly: true,
       secure: IS_PRODUCTION,
       sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.json({ message: 'Password changed successfully. Please log in again.' });
+    const { password: _, failedLoginAttempts: __, lockedUntil: ___, tokenVersion: ____, ...userWithoutPassword } = updatedUser;
+
+    res.json({
+      message: 'Password changed successfully.',
+      user: userWithoutPassword,
+    });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Server error changing password.' });

@@ -9,6 +9,7 @@ import Sidebar from './components/common/Sidebar';
 
 import DemoBanner from './components/common/DemoBanner';
 import LoginPage from './pages/LoginPage';
+import MandatoryPasswordChangePage from './pages/MandatoryPasswordChangePage';
 
 // Librarian Pages
 import LibrarianDashboard from './pages/librarian/Dashboard';
@@ -76,6 +77,10 @@ const ProtectedRoute: React.FC<{
     return <Navigate to="/login" replace />;
   }
 
+  if (user.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect to user's home dashboard
     if (user.role === 'LIBRARIAN') return <Navigate to="/librarian" replace />;
@@ -92,6 +97,7 @@ const RootRedirect: React.FC = () => {
 
   if (loading) return null;
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
 
   if (user.role === 'LIBRARIAN') return <Navigate to="/librarian" replace />;
   if (user.role === 'TEACHER') return <Navigate to="/teacher" replace />;
@@ -121,6 +127,7 @@ export const App: React.FC = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<MandatoryPasswordChangePage />} />
           <Route path="/" element={<RootRedirect />} />
 
           {/* Librarian Routes */}

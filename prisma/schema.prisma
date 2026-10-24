@@ -27,6 +27,7 @@ model User {
   secondLanguage String?  // TELUGU | SANSKRIT | ARABIC | HINDI
   phone               String?
   active              Boolean   @default(true)
+  mustChangePassword  Boolean   @default(false)
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
   tokenVersion        Int       @default(0)

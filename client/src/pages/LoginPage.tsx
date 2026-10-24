@@ -31,9 +31,15 @@ export const LoginPage: React.FC = () => {
       toast.success(`Welcome back, ${user.name}!`);
 
       // Redirect based on role
-      if (user.role === 'LIBRARIAN') navigate('/librarian');
-      else if (user.role === 'TEACHER') navigate('/teacher');
-      else navigate('/student');
+      if (user.mustChangePassword) {
+        navigate('/change-password');
+      } else if (user.role === 'LIBRARIAN') {
+        navigate('/librarian');
+      } else if (user.role === 'TEACHER') {
+        navigate('/teacher');
+      } else {
+        navigate('/student');
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to login. Please check credentials.');

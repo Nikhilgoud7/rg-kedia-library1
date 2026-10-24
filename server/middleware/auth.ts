@@ -13,6 +13,7 @@ export interface AuthRequest extends Request {
     role: string;
     program?: string | null;
     branch?: string | null;
+    mustChangePassword?: boolean;
   };
 }
 
@@ -41,7 +42,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true, tokenVersion: true },
+      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true, tokenVersion: true, mustChangePassword: true },
     });
 
     if (!user || !user.active) {
@@ -56,6 +57,25 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
 
     req.user = user;
+
+    // Mandatory password change enforcement (Phase 9B)
+    if (user.mustChangePassword) {
+      const normalizedPath = (req.originalUrl ? req.originalUrl.split('?')[0] : (req.baseUrl + req.path)).replace(/\/+$/, '');
+      const isAllowed =
+        (req.method === 'GET' && (normalizedPath === '/api/auth/me' || normalizedPath === '/api/user/profile')) ||
+        (req.method === 'PUT' && normalizedPath === '/api/auth/change-password') ||
+        (req.method === 'POST' && normalizedPath === '/api/auth/logout');
+
+      if (!isAllowed) {
+        res.status(403).json({
+          error: 'Password change required. You must change your password before accessing the library system.',
+          code: 'PASSWORD_CHANGE_REQUIRED',
+          mustChangePassword: true,
+        });
+        return;
+      }
+    }
+
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired token.' });

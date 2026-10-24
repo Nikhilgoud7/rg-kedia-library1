@@ -48,7 +48,8 @@
     "test:storage": "node tests/runner.js --allow-tests --suite=storageAdapter",
     "test:cover-api": "node tests/runner.js --allow-tests --suite=bookCoverApi",
     "test:cover-ui": "node tests/runner.js --allow-tests --suite=bookCoverUIWorkflow",
-    "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport"
+    "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport",
+    "test:password-change": "node tests/runner.js --allow-tests --suite=mandatoryPasswordChange"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

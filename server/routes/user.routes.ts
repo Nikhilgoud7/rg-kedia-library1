@@ -19,7 +19,7 @@ const dataExportLimiter = rateLimit({
 // Fields that students are NEVER allowed to modify through the profile API
 const PROTECTED_FIELDS = [
   'id', 'email', 'password', 'role', 'rollNumber', 'program', 'branch',
-  'year', 'semester', 'secondLanguage', 'active', 'createdAt', 'updatedAt',
+  'year', 'semester', 'secondLanguage', 'active', 'createdAt', 'updatedAt', 'mustChangePassword',
 ];
 
 // GET /api/user/profile - Returns the authenticated user's profile
@@ -40,6 +40,7 @@ router.get('/profile', authenticate, async (req: AuthRequest, res: Response): Pr
         secondLanguage: true,
         phone: true,
         active: true,
+        mustChangePassword: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -128,6 +129,7 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response): Pr
         secondLanguage: true,
         phone: true,
         active: true,
+        mustChangePassword: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -164,8 +166,9 @@ router.get('/data-export', authenticate, dataExportLimiter, async (req: AuthRequ
           secondLanguage: true,
           phone: true,
           active: true,
-          createdAt: true,
-          updatedAt: true,
+        mustChangePassword: true,
+        createdAt: true,
+        updatedAt: true,
         },
       }),
       prisma.lending.findMany({

@@ -39,7 +39,7 @@ export class TestDataManager {
     return `TEST-${this.sessionPrefix.toUpperCase()}-${num}${tag ? '-' + tag : ''}`;
   }
 
-  async createUser({ role = 'STUDENT', active = true, program = 'BCOM', branch = 'General', semester = 1, tag = '' } = {}) {
+  async createUser({ role = 'STUDENT', active = true, program = 'BCOM', branch = 'General', semester = 1, tag = '', mustChangePassword = false } = {}) {
     const hash = await this.getPasswordHash();
     const email = this.generateEmail(role, tag);
     const rollNumber = role === 'STUDENT' ? this.generateRollNumber(tag) : null;
@@ -60,6 +60,7 @@ export class TestDataManager {
             branch,
             semester,
             active,
+            mustChangePassword,
           },
         });
       } catch (err) {

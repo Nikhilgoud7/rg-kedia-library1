@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (credentials: { email?: string; rollNumber?: string; password: string }) => Promise<User>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateUser: (updatedUser: User) => void;
   isAuthenticated: boolean;
 }
 
@@ -38,6 +39,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshProfile();
   }, []);
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('rg_kedia_user', JSON.stringify(updatedUser));
+  };
+
   const login = async (credentials: { email?: string; rollNumber?: string; password: string }) => {
     const response = await api.post('/auth/login', credentials);
     const { user: userData } = response.data;
@@ -67,6 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         refreshProfile,
+        updateUser,
         isAuthenticated: !!user,
       }}
     >
