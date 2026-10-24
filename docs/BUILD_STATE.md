@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 9A)**: `8ed6f2248f9eb7b3be76d60707d417c1efdd81b2`
-- **Current Head**: Phase 9B Completed (Mandatory First-Login Password Change Verified, 1,421 Total Regression Assertions Across 29 Suites)
+- **Committed Baseline (Phase 9B)**: `f60ece2706014e748ef4aa6bded1c80bdbbb6090`
+- **Current Head**: Phase 9C Remediated & Hardened (Automated Backup & Disaster Recovery Fully Verified, 1,473 Total Regression Assertions Across 30 Suites)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -38,6 +38,22 @@
 - **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
 - **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
 - **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9C**: Automated Backup & Disaster Recovery (`backupRecovery.test.js` — 52 assertions, expanded from 45 following remediation loop).
+  - Audit Condition Remediation:
+    - `SEC-9C-01` (Key Derivation Hardening): Replaced arbitrary passphrase hashing in `server/lib/backup/cryptoUtils.ts` with strict enforcement of 64-character hexadecimal keys (256-bit entropy). Enforces explicit rejection of non-hex strings, whitespace, and arbitrary passphrases without silent hashing to eliminate offline brute-force vulnerability.
+    - `DR-9C-02` (Transactional Restore & Target Hardening): Wrapped entire reverse-dependency deletion and forward-dependency repopulation in `server/lib/backup/restoreEngine.ts` inside an atomic `prisma.$transaction(async (tx) => { ... })` block with 60-second execution timeout and post-restoration record count sanity checks, guaranteeing automatic full rollback on failure. Removed `--allow-production` CLI option and validation bypass to permanently protect production databases.
+    - `DR-9C-03` (Atomic Backup File Landing): Implemented atomic file creation in `server/lib/backup/backupEngine.ts` by streaming to a unique temporary file (`<filename>.<pid>.<timestamp>.tmp`) and companion checksum tmp file, atomically renaming them via `fs.renameSync` only after complete write and flush, with automated cleanup of `.tmp` artifacts on error.
+  - Infrastructure Capability Audit: Codified exact Neon `free_v3` plan parameters (6-hour history retention, root-branch instant restore, 1 manual snapshot limit, 0 scheduled snapshots on free plan, 10 branches / 1 GiB storage) and GitHub Actions free-tier constraints (2,000 runner minutes, 7-day artifact retention).
+  - Zero-Rupee Hybrid Architecture: Formulated two-layer defense-in-depth recovery model in `docs/BACKUP_AND_DISASTER_RECOVERY.md`:
+    - Layer 1 (Operational 0-6h): Native Neon PITR and Time Travel for instantaneous rollback (< 5 min RTO).
+    - Layer 2 (Disaster Recovery 24h): Automated client-side AES-256-GCM encrypted logical backups with SHA-256 verification and sequential table restoration runbook (< 30 min RTO).
+  - Backup Generation Engine: Implemented `server/lib/backup/backupEngine.ts` capturing all 10 core tables in referential integrity order, encoding binary `BookCover` bytea data to base64, calculating SHA-256 data digests, generating `RG_KEDIA_BACKUP_V1` metadata envelopes, and enforcing concurrency exclusion via `backups/.backup.lock`.
+  - Client-Side Encryption: Implemented AES-256-GCM encryption in `server/lib/backup/cryptoUtils.ts` with 12-byte random IV, 16-byte authentication tag, 32-byte key derivation, and automated secret redaction (`redactSecrets`).
+  - Integrity Verification Engine: Implemented `server/lib/backup/verifyEngine.ts` validating physical existence, non-empty size, companion `.sha256` digest, AES-256-GCM auth tags, format headers, table presence, payload SHA-256 checksums, and record count reconciliation.
+  - Disaster Recovery Restore Engine: Implemented `server/lib/backup/restoreEngine.ts` with strict positive test endpoint allowlist safety guards (`validateRestoreDatabaseTarget`), pre-flight verification, dry-run simulation, reverse-dependency deletion, and forward-dependency repopulation.
+  - Automated Scheduled CI Workflow: Created `.github/workflows/backup.yml` with least-privilege permissions (`contents: read`), concurrency control (`database-backup` group), strict client-side encryption enforcement, and confidential artifact archiving (7-day retention).
+  - CLI Utilities: Created `scripts/backup.ts`, `scripts/verifyBackup.ts`, and `scripts/restore.ts` with corresponding npm scripts (`backup:create`, `backup:verify`, `backup:restore`).
+  - Dedicated Automated Test Suite: Added `tests/suites/backupRecovery.test.js` (52 assertions) covering 64-hex key validation, passphrase rejection, checksums, secret redaction, AES-256-GCM round-trips, tampering detection, lock mechanics, atomic file landing, backup generation, integrity checks, target database safety guards, transactional rollback preservation, and synthetic restore drills against the isolated test database. Registered `"test:backup"` in `package.json`.
 - **Phase 9B**: Mandatory First-Login Password Change (`mandatoryPasswordChange.test.js` — 48 assertions).
   - Schema Enhancement: Added `mustChangePassword Boolean @default(false)` to `User` model in `prisma/schema.prisma`.
   - Additive Migration: Created and deployed `20261024073600_add_must_change_password` to isolated Neon test branch (`ep-autumn-sky-b3vpykh4`), defaulting existing users to `false` (zero unexpected lockouts).

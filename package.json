@@ -20,6 +20,9 @@
     "prisma:studio": "prisma studio",
     "demo:reset": "tsx scripts/demoReset.ts",
     "notifications:retention": "tsx server/jobs/retention.ts",
+    "backup:create": "tsx scripts/backup.ts",
+    "backup:verify": "tsx scripts/verifyBackup.ts",
+    "backup:restore": "tsx scripts/restore.ts",
     "test": "node tests/runner.js --allow-tests",
     "test:auth": "node tests/runner.js --allow-tests --suite=auth",
     "test:authorization": "node tests/runner.js --allow-tests --suite=authorization",
@@ -49,7 +52,8 @@
     "test:cover-api": "node tests/runner.js --allow-tests --suite=bookCoverApi",
     "test:cover-ui": "node tests/runner.js --allow-tests --suite=bookCoverUIWorkflow",
     "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport",
-    "test:password-change": "node tests/runner.js --allow-tests --suite=mandatoryPasswordChange"
+    "test:password-change": "node tests/runner.js --allow-tests --suite=mandatoryPasswordChange",
+    "test:backup": "node tests/runner.js --allow-tests --suite=backupRecovery"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

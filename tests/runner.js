@@ -30,6 +30,7 @@ import { runBookCoverApiTests } from './suites/bookCoverApi.test.js';
 import { runBookCoverUIWorkflowTests } from './suites/bookCoverUIWorkflow.test.js';
 import { runDataExportTests } from './suites/dataExport.test.js';
 import { runMandatoryPasswordChangeTests } from './suites/mandatoryPasswordChange.test.js';
+import { runBackupRecoveryTests } from './suites/backupRecovery.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -61,6 +62,7 @@ const SUITES = {
   bookCoverUIWorkflow: { name: 'Book Cover UI Workflow Suite (Phase 8D)', fn: runBookCoverUIWorkflowTests },
   dataExport: { name: 'Personal Data Export & DPDP Compliance Suite (Phase 9A)', fn: runDataExportTests },
   mandatoryPasswordChange: { name: 'Mandatory First-Login Password Change Suite (Phase 9B)', fn: runMandatoryPasswordChangeTests },
+  backupRecovery: { name: 'Automated Backup & Disaster Recovery Suite (Phase 9C)', fn: runBackupRecoveryTests },
 };
 
 async function checkHealth(url) {

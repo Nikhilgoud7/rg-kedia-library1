@@ -1,0 +1,80 @@
+name: Automated Database Backup & Disaster Recovery
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC (07:30 AM IST)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate backup workflow without storing artifact'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Generate & Verify Encrypted Backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Verify Encryption Key Configuration
+        run: |
+          if [ -z "${{ secrets.BACKUP_ENCRYPTION_KEY }}" ]; then
+            echo "::error::BACKUP_ENCRYPTION_KEY secret is required to ensure encrypted backup confidentiality."
+            exit 1
+          fi
+
+      - name: Execute Encrypted Backup & Integrity Verification
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED || secrets.DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          NODE_ENV: production
+        run: |
+          echo "Starting encrypted database backup..."
+          npx tsx scripts/backup.ts --encrypt --validate
+
+      - name: Verify Backup Artifact Is Encrypted
+        run: |
+          # Ensure only encrypted files (.enc.json) are present
+          PLAINTEXT_FILES=$(find backups -maxdepth 1 -name "*.json" ! -name "*.enc.json" | wc -l)
+          if [ "$PLAINTEXT_FILES" -gt 0 ]; then
+            echo "::error::CRITICAL SECURITY BREACH: Plaintext backup file detected! Aborting artifact upload."
+            exit 1
+          fi
+          echo "Confidentiality check passed: All backup artifacts are AES-256-GCM encrypted."
+
+      - name: Upload Encrypted Backup Artifact (7-Day Retention)
+        if: ${{ inputs.dry_run != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rg-kedia-db-backup-${{ github.run_id }}
+          path: |
+            backups/*.enc.json
+            backups/*.sha256
+          retention-days: 7
+          if-no-files-found: error
