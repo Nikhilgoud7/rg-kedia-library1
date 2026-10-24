@@ -47,7 +47,8 @@
     "test:env-guard": "node tests/runner.js --allow-tests --suite=envGuardValidation",
     "test:storage": "node tests/runner.js --allow-tests --suite=storageAdapter",
     "test:cover-api": "node tests/runner.js --allow-tests --suite=bookCoverApi",
-    "test:cover-ui": "node tests/runner.js --allow-tests --suite=bookCoverUIWorkflow"
+    "test:cover-ui": "node tests/runner.js --allow-tests --suite=bookCoverUIWorkflow",
+    "test:data-export": "node tests/runner.js --allow-tests --suite=dataExport"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

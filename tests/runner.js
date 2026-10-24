@@ -28,6 +28,7 @@ import { runEnvGuardValidationTests } from './suites/envGuardValidation.test.js'
 import { runStorageAdapterTests } from './suites/storageAdapter.test.js';
 import { runBookCoverApiTests } from './suites/bookCoverApi.test.js';
 import { runBookCoverUIWorkflowTests } from './suites/bookCoverUIWorkflow.test.js';
+import { runDataExportTests } from './suites/dataExport.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -57,6 +58,7 @@ const SUITES = {
   storageAdapter: { name: 'Storage Adapter & Database Storage Driver Suite (Phase 8B)', fn: runStorageAdapterTests },
   bookCoverApi: { name: 'Book Cover API Suite (Phase 8C)', fn: runBookCoverApiTests },
   bookCoverUIWorkflow: { name: 'Book Cover UI Workflow Suite (Phase 8D)', fn: runBookCoverUIWorkflowTests },
+  dataExport: { name: 'Personal Data Export & DPDP Compliance Suite (Phase 9A)', fn: runDataExportTests },
 };
 
 async function checkHealth(url) {

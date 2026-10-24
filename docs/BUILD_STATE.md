@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 8D)**: `74c0a0b198ac5e6a18f1ef71066dd46b099f3221`
-- **Current Head**: Phase 8E & Gate 3 Completed (Full Integration Verified, 1,279 Total Regression Assertions Across 27 Suites, Gate 3 Passed)
+- **Committed Baseline (Phase 8E)**: `92b788ac241b736411156b4c65e9fe28f0508884`
+- **Current Head**: Phase 9A Remediated (Privacy Framework & Personal Data Export Verified, 1,373 Total Regression Assertions Across 28 Suites)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -30,54 +30,31 @@
 - **Phase 6G**: Cross-Persona Physical Inventory & Student/Faculty Visibility Hardening (`crossPersonaInventory.test.js` — 44 assertions).
 - **Phase 6H**: Physical Inventory Final Quality Gate & End-to-End Lifecycle Suite (`inventoryFinalGate.test.js` — 49 assertions, commit `1ffcbb5`).
 - **Phase 7A**: Bulk Book Import Foundation & Validation (`bulkImportFoundation.test.js` — 59 assertions).
-  - Designed RFC 4180 zero-dependency CSV format and serializer with formula injection sanitization (`=`, `+`, `-`, `@`, `\t`, `\r` escaped with `'`).
-  - Added downloadable template endpoint `GET /api/books/import/template` (Librarian only, UTF-8 BOM, attachment headers, example rows).
-  - Implemented reusable validation engine (`server/lib/bulkImportValidation.ts`) checking title, author, segment, ISBN-10/13 normalization, in-sheet duplicate ISBNs, duplicate barcodes, condition/program mappings, copy count bounds, and file limits.
-  - Added read-only duplicate detector (`checkDatabaseDuplicates`) and validation endpoint `POST /api/books/import/validate`.
 - **Phase 7B**: Streaming File Ingestion & Transactional Batch Import (`bulkImportExecution.test.js` — 51 assertions).
-  - Implemented execution endpoint `POST /api/books/import/execute` (Librarian only) supporting in-memory Multer file streaming and JSON `{ csvContent }` payloads.
-  - Enforced 5MB file-size limit, 1,000-row ceiling, and `.csv` extension checking; untrusted files never written to disk.
-  - Re-validates CSV data on the server and checks DB for duplicate ISBNs or barcodes immediately before writing.
-  - Implemented chunked transactional batch engine (`server/lib/bulkImportService.ts`, 50 books per batch) with PostgreSQL advisory transaction lock (`pg_advisory_xact_lock`).
-  - Atomically creates `Book`, `BookCopy` (with copy numbers, barcodes, conditions, status `AVAILABLE`), and `BookProgram` (curriculum branch mappings).
-  - Guarantees zero partial imports: any failed batch rolls back cleanly and cleans up prior batches from the run.
-  - Emits administrative audit logs (`AUDIT_ACTIONS.BOOK_CREATED`) with `batchImport: true` and batch statistics.
-  - Added full test suite `tests/suites/bulkImportExecution.test.js` with 51 verified assertions.
 - **Phase 7C**: Librarian Import Modal, Preview Grid & Confirmation Workflow (`bulkImportUIWorkflow.test.js` — 79 assertions).
-  - Created reusable `BulkImportModal` component in `client/src/components/librarian/BulkImportModal.tsx`.
-  - Added prominent "Bulk Import CSV" action button in `ManageBooks.tsx` action bar next to "Add New Book Title".
-  - Implemented drag-and-drop and file input upload zone enforcing `.csv` extension and 5MB client-side size boundaries.
-  - Added in-memory RFC 4180 parser and client-side pre-validator (`client/src/lib/csvHelper.ts`) for zero-latency local preview.
-  - Integrated server validation and database conflict detection via `POST /api/books/import/validate`.
-  - Built high-density, horizontal-scrolling preview table with row numbering, status badges, inline error diagnostics, search/filtering, and pagination.
-  - Added import summary metrics bar (total books, physical copies, unique ISBNs, barcodes, valid/error counts).
-  - Designed explicit two-step confirmation dialog with database modification warnings, summary statistics, and authorization checkbox.
-  - Integrated `POST /api/books/import/execute` via multipart `FormData`, duplicate submission prevention, loading indicators, and automatic catalog refresh.
-  - Extended `Modal.tsx` to support wide modals (`maxWidth="4xl" | "5xl" | "6xl"`).
-  - Added dedicated automated regression test suite `tests/suites/bulkImportUIWorkflow.test.js` with 79 verified assertions.
-
 - **Phase 7D**: Bulk Import Final Quality Gate & Database Security Hardening (`bulkImportFinalGate.test.js` — 69 assertions, `envGuardValidation.test.js` — 15 assertions).
-  - Hardened database conflict row attribution in `checkDatabaseDuplicates` (`server/lib/bulkImportValidation.ts`), returning `row: r.rowNumber`, conflicting identifiers, and existing database titles/IDs.
-  - Updated `BulkImportModal.tsx` preview grid to highlight database-conflicting rows with badges and specific field collision callouts alongside file-level errors.
-  - Achieved client/server validation parity in `client/src/lib/csvHelper.ts` for trailing blank rows, 4-digit publication years (`1000 <= year <= currentYear + 1`), integer `TotalCopies`, comma and semicolon copy delimiter support, and case-insensitive condition matching.
-  - Fortified multi-batch compensating rollback in `server/lib/bulkImportService.ts` with atomic batch processing, cleanup tracking, and administrative audit logging (`AUDIT_ACTIONS.BOOK_DELETED` with `{ batchImport: true, rollback: true, cleanupSuccess: true, booksRemovedCount }`).
-  - Restricted failure injection header `x-test-simulate-failure-batch` strictly to genuine automated test environments (`NODE_ENV === 'test' && !IS_PRODUCTION`). Completely ignored in production and standard runtime environments.
-  - Established a dedicated, isolated Neon PostgreSQL test branch (`test` branch, id: `br-plain-salad-b3qylt8r`, compute endpoint `ep-autumn-sky-b3vpykh4`), separated from the production branch (`ep-aged-sunset-b3548him`).
-  - Implemented fail-closed positive allowlist guard (`tests/helpers/envGuard.js` via `APPROVED_TEST_ENDPOINT_PATTERNS`), strictly rejecting all unapproved, production, unknown, missing, malformed, or ambient `.env` fallback databases.
-  - Added pure, non-database-mutating guard validation test suite (`tests/suites/envGuardValidation.test.js` — 15 assertions) verifying allowlist enforcement and zero secret leakage.
-  - Standardized direct compute routing and unpooled connection support (`DATABASE_URL_UNPOOLED`), ensuring reliable Prisma transactions, concurrency, and PostgreSQL advisory locking (`pg_advisory_xact_lock`).
-  - Built resilient transient retry handling in `tests/helpers/testData.js` for serverless compute wake-up latency.
-  - Added full end-to-end bulk import quality gate suite (`tests/suites/bulkImportFinalGate.test.js` — 69 assertions) covering 16 scenarios (database conflict row attribution, trailing blank rows, year boundaries, integer TotalCopies, delimiter parity, 1,000 vs 1,001 rows, multilingual Unicode [Devanagari/Telugu/Sanskrit diacritics], mid-batch compensating rollback, rollback audit events, failure injection security, 5MB upload boundary, and recursive zero-secrets leakage scan).
-  - Registered suites in `tests/runner.js` and added `"test:bulk-import-final-gate"` and `"test:env-guard"` scripts in `package.json`.
 - **Phase 7E**: Bulk Book Export Engine & Export Formats (`bulkExport.test.js` — 91 assertions).
-  - Implemented librarian-only export endpoint `GET /api/books/export` with role authorization gate (`authorize('LIBRARIAN')`).
-  - Delivered exact 14-column format parity with Phase 7A `BULK_IMPORT_COLUMNS` (`Title`, `Author`, `ISBN`, `Publisher`, `Edition`, `PublicationYear`, `Category`, `Segment`, `Description`, `TotalCopies`, `ShelfLocation`, `Barcodes`, `CopyConditions`, `Programs`), ensuring 100% round-trip re-importability.
-  - Formatted multiple physical copies into comma-delimited barcodes (`BC-1, BC-2`), copy conditions (`Good, Fair`), and semicolon-delimited curriculum program mappings (`BCOM:General; BBA`).
-  - Hardened formula injection protection (`sanitizeCsvField`) to neutralize spreadsheet macro execution for all formula trigger characters (`=`, `+`, `-`, `@`, `\t`, `\r`), prefixing with single quotes (`'`).
-  - Integrated UTF-8 Byte Order Mark (`\uFEFF`) and CRLF line endings for native Microsoft Excel and Google Sheets parity with 100% Unicode byte fidelity (Devanagari, Telugu, Sanskrit diacritics).
-  - Supported selective filtering consistent with catalog browsing (`search`, `category`, `segment`, `program`).
-  - Recorded administrative audit logging via `logAdminAction` (`AUDIT_ACTIONS.BOOK_EXPORTED`) capturing actor ID, timestamp, exported count, and filter parameters.
-  - Integrated "Export CSV" action button with download state and loading indicator into `ManageBooks.tsx` top action bar.
+- **Phase 8B**: Storage Adapter & Database-Backed Image Storage (`storageAdapter.test.js` — 59 assertions).
+- **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
+- **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
+- **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9A**: Privacy Framework & Personal Data Export (`dataExport.test.js` — 94 assertions, expanded from 69 following Phase 9A remediation loop).
+  - Authored institutional privacy compliance standard in `docs/DPDP_COMPLIANCE.md` under India's Digital Personal Data Protection Act, 2023 (DPDP Act).
+  - Documented complete personal data inventory, processing purposes, legal grounds, and strict persona access boundaries.
+  - Formulated proposed data retention policy (active student lifecycle + 5 years academic archive), explicitly establishing institutional governing council approval requirements prior to irreversible data deletion schedules.
+  - Defined Data Subject Access Request (DSAR) technical and operational workflows with formal 30-day response SLA, identity verification protocols, and statutory exemptions (active examinations, pending disciplinary investigations).
+  - Codified dual-track incident notification procedures distinguishing statutory CERT-In 6-hour cybersecurity reporting under IT Act s. 70B, DPDP Act 2023 s. 8(6) personal data breach intimation to the Data Protection Board of India (DPBI) and affected Data Principals upon MeitY rules notification, and internal institutional response workflows.
+  - Implemented secure, self-service personal data export endpoint `GET /api/user/data-export` (`server/routes/user.routes.ts`):
+    - Authenticated access for all personas (STUDENT, TEACHER, LIBRARIAN) using existing JWT cookie and Bearer token infrastructure.
+    - Zero IDOR vulnerability: derives principal identity strictly from verified session (`req.user.id`), completely ignoring query or body parameter tampering attempts.
+    - Enforced dedicated user-scoped rate limiting (`dataExportLimiter`: 5 exports / 15 minutes per authenticated user via `req.user.id`, returning HTTP 429 when exceeded, active across all environments).
+    - Excludes authentication secrets (`password`, `tokenVersion`, `failedLoginAttempts`, `lockedUntil`) from profile payloads.
+    - Exports comprehensive academic history: user profile, active loans, historical loans, book requests, notifications, and uploaded academic materials (for faculty/librarians).
+    - Minimizes redundant serialization: eliminated nested `bookCopy` object from active and historical loans, retaining clean flattened attributes (`barcode`, `copyNumber`, `shelfLocation`, `bookTitle`, etc.).
+    - Audits every export: records `DATA_EXPORT_GENERATED` audit log via `logAdminAction` with actor ID, role, and summary counts without exposing sensitive data.
+    - Enforces strict anti-caching and privacy HTTP headers: `Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `Expires: 0`.
+    - Returns standardized download attachment header: `Content-Disposition: attachment; filename="rg-kedia-personal-data-export-YYYY-MM-DD.json"`.
+  - Added dedicated automated regression test suite `tests/suites/dataExport.test.js` with 94 verified assertions covering export schemas, persona filtering, IDOR immunity, cache prevention, copy serialization minimization, audit logging, and per-user rate limiting. Registered `"test:data-export"` in `package.json`.
   - Added dedicated automated regression test suite `tests/suites/bulkExport.test.js` with 91 verified assertions and registered `"test:bulk-export"` in `package.json`.
 - **Phase 8B**: Storage Adapter & Database-Backed Image Storage (`storageAdapter.test.js` — 59 assertions).
   - Implemented pure, driver-independent storage abstraction contract `StorageAdapter` in `server/lib/storage/types.ts` (`put`, `get`, `delete`).
@@ -161,20 +138,20 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 3 — Completed (Real Inventory, Bulk Import, Cover Images)
-- **Current Sub-Phase**: Phase 8E Complete (Full Integration & Quality Gate Verified)
-- **Gate 3 Status**: **GATE 3 PASSED** (All Phase 6, 7, and 8 requirements verified)
+- **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
+- **Current Sub-Phase**: Phase 9A Remediated (Privacy Framework & Personal Data Export Verified)
+- **Gate 4 Status**: In Progress (Phase 9A Remediated — Ready for Independent Re-Audit)
 - **Branch Status**: `main`
-- **Working Tree**: Preserved uncommitted changes per autonomous review workflow
-- **Verification Status**: 1,279 / 1,279 regression test assertions passing across 27 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Working Tree**: Preserved uncommitted changes for independent re-audit per project standards
+- **Verification Status**: 1,373 / 1,373 regression test assertions passing across 28 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 27
-- **Total Test Assertions**: 1279 (1279 Passed, 0 Failed, 0 Skipped, Duration: ~305s)
+- **Total Test Suites**: 28
+- **Total Test Assertions**: 1373 (1373 Passed, 0 Failed, 0 Skipped, Duration: ~310s)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
-- **Data Safety & Privacy**: Masked student identities, safe borrower projections, strict RBAC, formula injection neutralization, test branch PII policy documented
+- **Data Safety & Privacy**: DPDP Act 2023 compliance framework documented (`docs/DPDP_COMPLIANCE.md`), self-service DSAR export (`GET /api/user/data-export`), masked student identities, safe borrower projections, strict RBAC, formula injection neutralization, test branch PII policy documented
 - **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
 - **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
 - **Storage Subsystem**: Zero-cost PostgreSQL-backed storage adapter (`BookCover`), in-memory Sharp WebP processing <= 50 KB, zero production disk writes, complete SSRF protection
@@ -183,6 +160,7 @@
 - **Full Automated Regression Suite**: `npm test`
 - **Authentication Suite**: `npm run test:auth`
 - **Role Authorization Suite**: `npm run test:authorization`
+- **Personal Data Export & DPDP Suite**: `npm run test:data-export`
 - **Lending Policy Suite**: `npm run test:lending`
 - **PostgreSQL Concurrency Suite**: `npm run test:concurrency`
 - **Notification Suite**: `npm run test:notification`
@@ -210,4 +188,5 @@
 - **Book Cover UI Workflow Suite**: `npm run test:cover-ui`
 
 ## Next Up
-- Phase 8E: Production Deployment & Verification.
+- Phase 9A: Independent Integrity Re-Audit
+- Phase 9B: Mandatory First-Login Password Change & Expired Credentials Flow
