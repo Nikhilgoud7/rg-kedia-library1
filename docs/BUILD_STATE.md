@@ -1,8 +1,8 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 9D)**: `469f9181b43ce12e25c0551f5b1011156284dc39`
-- **Current Head**: Phase 9E Implemented & Verified (Staging Dry-Run, Production Migration Simulation & Rollback Readiness, 1,618 Total Regression Assertions Across 32 Suites)
+- **Committed Baseline (Phase 9E)**: `fb7a7c55603badb98d9f49ec6c95390b82828b21`
+- **Current Head**: Phase 9F Implemented & Verified (Complete Demo Account Cleanup Workflow, 1,674 Total Regression Assertions Across 33 Suites, Stage 4 Gate 4 Reached)
 
 ## Completed Sub-Phases
 - **Phase 1**: Foundations & Database Setup
@@ -38,6 +38,16 @@
 - **Phase 8C**: Cover Image API Implementation & Security Hardening (`bookCoverApi.test.js` — 101 assertions).
 - **Phase 8D**: Frontend Cover Image Integration (`bookCoverUIWorkflow.test.js` — 58 assertions).
 - **Phase 8E**: Final Integration, Security Verification, Quality Gate & Gate 3 (`npm test` — 1,279 assertions across 27 suites, commit `92b788a`).
+- **Phase 9F**: Complete Demo Account Cleanup Workflow (`demoPurge.test.js` — 68 assertions).
+  - Multi-Factor Provenance Classifier: Implemented `server/lib/migration/demoProvenance.ts` to identify and classify demo accounts without relying solely on email suffix matching. Correlates against 9 canonical seed personas (`CANONICAL_SEED_PERSONAS`) and verifies orthogonal factors (domain `@demo.rgkedia.local`, display name pattern, phone pattern `00000000xx`, and student roll pattern `1052-24-40[1-3]-[0-9]{3}`). Classifies accounts into `VERIFIED_DEMO`, `NON_DEMO`, and `AMBIGUOUS`.
+  - Ambiguous Account Defense: Inviolable rule enforced where accounts with conflicting or partial demo signals are classified as `AMBIGUOUS`, strictly prohibited from deletion, and immediately block purge planning (`status: 'BLOCKED'`).
+  - Active Loan Dependency Guard: `server/lib/migration/demoPurgeEngine.ts` enforces referential relationship checks, blocking account deletion if any active physical loans exist (`DEPENDENCY_CONFLICT`).
+  - Pure Dry-Run Engine: Verifies mathematical count parity before and after analysis across all database tables, confirming zero-mutation guarantee during planning.
+  - Safe, Transactional Purge Engine: Implemented `executeDemoAccountPurge` with positive target database allowlisting (`SEC-9F-01`), mandatory pre-purge encrypted backup verification (`DR-9F-01`), atomic transaction isolation (`prisma.$transaction`, 60s timeout), referential deletion cascade order (AuditLog, Notification, BookRequest, Lending, AcademicMaterial, User), post-purge count reconciliation, and administrative audit logging (`DEMO_ACCOUNTS_PURGED`).
+  - Audit Condition Remediation (SEC-9F-01): Implemented `resolveSafeAdminActor` guaranteeing that executing administrative actors must be verified `NON_DEMO` active librarians and cannot be in `plan.plannedUserIds`. Fails closed if only demo administrators exist or if an actor in the purge list is requested (`ACTOR_ID_IN_PURGE_LIST`).
+  - CLI Safeguards & Key Protection (SEC-9F-02): Updated `scripts/purgeDemoAccounts.ts` (`npm run demo:purge`) defaulting to safe read-only `--dry-run`, requiring explicit dual confirmation flags (`--execute --confirm`), strictly rejecting insecure command-line key passing (`--backup-key`), and enforcing key delivery via `BACKUP_ENCRYPTION_KEY` environment variable.
+  - Dedicated Automated Test Suite: Added `tests/suites/demoPurge.test.js` (68 assertions) covering canonical matching, suffix-only rejection, name/phone mismatch handling, non-demo preservation, live database inventory, zero-mutation dry-run, active loan blocking, pre-purge backup checks, target DB safety guards, actor resolution, cohort actor rejection, transactional atomicity, cascade cleanup, idempotency with zero drift, rollback on failure, audit log verification, CLI argument validation, and PII-free summary metrics. Registered `"test:demo-purge"` in `package.json`.
+  - Gate 4 Milestone Report: Created `docs/GATE_4_REPORT.md` documenting Stage 4 deliverables across Phases 9A-9F, architecture deep-dive, audit findings remediation register, test inventory (1,686 assertions across 33 suites), explicit production non-mutation disclosure, and pre-conditions for future real-data onboarding.
 - **Phase 9E**: Staging Dry-Run, Production Migration Simulation & Rollback Readiness (`migrationSimulation.test.js` — 71 assertions).
   - Staging Dry-Run Engine: Implemented `server/lib/migration/dryRunEngine.ts` providing pure non-mutating validation and in-database conflict detection. Analyzes proposed cohorts against existing database state, classifying operations into `INSERT`, `SKIP` (idempotent), and `CONFLICT` (`EMAIL_ALREADY_EXISTS_WITH_DIFFERENT_ROLL`, `ROLL_ALREADY_EXISTS_WITH_DIFFERENT_EMAIL`, `DATABASE_FIELD_MISMATCH`). Confirms mathematical parity between pre- and post-analysis database record counts (zero-mutation guarantee).
   - Pre-Migration Backup Enforcement: Enforces mandatory creation and integrity verification of client-side AES-256-GCM encrypted backups (`RG_KEDIA_ENCRYPTED_BACKUP_V1`) prior to executing simulation mutations against the isolated test database.
@@ -182,15 +192,15 @@
 
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
-- **Current Sub-Phase**: Phase 9E Complete (Staging Dry-Run, Production Migration Simulation & Rollback Readiness Verified)
-- **Gate 4 Status**: In Progress (Phase 9E Complete — Ready for Independent Audit)
+- **Current Sub-Phase**: Phase 9F Remediated & Verified (Complete Demo Account Cleanup Workflow Verified, Audit Conditions Remediated)
+- **Gate 4 Status**: Reached / Stage 4 Complete (Phase 9F Remediated & Verified — Ready for Final Independent Audit)
 - **Branch Status**: `main`
 - **Working Tree**: Preserved uncommitted changes for independent audit per project standards
-- **Verification Status**: 1,618 / 1,618 regression test assertions passing across 32 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Verification Status**: 1,686 / 1,686 regression test assertions passing across 33 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 32
-- **Total Test Assertions**: 1618 (1618 Passed, 0 Failed, 0 Skipped, Duration: ~354s)
+- **Total Test Suites**: 33
+- **Total Test Assertions**: 1686 (1686 Passed, 0 Failed, 0 Skipped)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
@@ -233,8 +243,10 @@
 - **Automated Backup & Disaster Recovery Suite**: `npm run test:backup`
 - **Synthetic User Cohort & Secure Credential Suite**: `npm run test:cohort`
 - **Staging Dry-Run, Migration Simulation & Rollback Suite**: `npm run test:migration`
+- **Demo Account Provenance & Purge Suite**: `npm run test:demo-purge`
 - **CLI Migration Simulation Utility**: `npm run migration:simulate`
+- **CLI Demo Account Purge Utility**: `npm run demo:purge`
 
 ## Next Up
-- Phase 9E: Complete, audited (Approved), awaiting commit & push authorization
-- Phase 9F: Real Data Import Tooling / Production Cutover Readiness & Gate 4
+- Stage 4 Complete: Milestone Gate 4 reached (`docs/GATE_4_REPORT.md`)
+- Phase 9F remediated and verified. Ready for final independent audit. Awaiting user authorization.

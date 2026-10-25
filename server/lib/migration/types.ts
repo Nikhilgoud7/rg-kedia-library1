@@ -105,3 +105,84 @@ export interface RollbackResult {
   durationMs: number;
   error?: string;
 }
+
+// ─── Phase 9F Demo Account Provenance & Purge Types ───────────────────────
+
+export type AccountClassification = 'VERIFIED_DEMO' | 'AMBIGUOUS' | 'NON_DEMO';
+
+export interface ProvenanceDetails {
+  userId: string;
+  email: string;
+  role: string;
+  classification: AccountClassification;
+  factors: {
+    hasDemoEmailDomain: boolean;
+    hasDemoNamePattern: boolean;
+    hasDemoPhonePattern: boolean;
+    hasDemoRollPattern: boolean;
+    matchesCanonicalSeedPersona: boolean;
+  };
+  reasons: string[];
+}
+
+export interface DemoAccountInventory {
+  totalUsersScanned: number;
+  verifiedDemoCount: number;
+  ambiguousCount: number;
+  nonDemoCount: number;
+  byRole: Record<string, number>;
+  verifiedDemoUserIds: string[];
+  ambiguousUserIds: string[];
+  details: ProvenanceDetails[];
+  inventoriedAt: string;
+}
+
+export interface DemoPurgeDependencyReport {
+  userId: string;
+  email: string;
+  activeLendingsCount: number;
+  historicalLendingsCount: number;
+  bookRequestsCount: number;
+  notificationsCount: number;
+  examPapersCount: number;
+  auditLogsAsActorCount: number;
+  hasBlockingDependencies: boolean;
+  blockingReasons: string[];
+}
+
+export interface DemoPurgePlan {
+  status: 'READY' | 'BLOCKED';
+  totalUsersBefore: number;
+  eligibleForPurgeCount: number;
+  blockedByDependenciesCount: number;
+  ambiguousDetectedCount: number;
+  totalToPurge: number;
+  projectedTotalUsersAfter: number;
+  zeroMutationVerified: boolean;
+  blockingReasons: string[];
+  dependencyReports: DemoPurgeDependencyReport[];
+  plannedUserIds: string[];
+  plannedAt: string;
+}
+
+export interface DemoPurgeOptions {
+  actorId: string;
+  dryRun?: boolean;
+  requireBackup?: boolean;
+  backupEncryptionKey?: string;
+  skipBackup?: boolean;
+  targetDbUrl?: string;
+}
+
+export interface DemoPurgeResult {
+  status: 'SUCCESS' | 'BLOCKED' | 'FAILED' | 'ROLLED_BACK';
+  purgedCount: number;
+  prePurgeCount: number;
+  postPurgeCount: number;
+  isReconciled: boolean;
+  preBackupVerified: boolean;
+  preBackupFile?: string;
+  auditLogCreated: boolean;
+  durationMs: number;
+  error?: string;
+}
