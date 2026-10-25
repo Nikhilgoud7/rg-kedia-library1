@@ -106,6 +106,8 @@ model BookCopy {
   lendings Lending[]
 
   @@unique([bookId, copyNumber])
+  @@index([status])
+  @@index([bookId, status, condition])
 }
 
 // ─── Lending System ─────────────────────────────────────
@@ -126,6 +128,9 @@ model Lending {
 
   user     User     @relation(fields: [userId], references: [id])
   bookCopy BookCopy @relation(fields: [bookCopyId], references: [id])
+
+  @@index([issuedDate, status])
+  @@index([dueDate, status])
 }
 
 model BookRequest {

@@ -12,6 +12,7 @@ import lendingRoutes from './routes/lending.routes.js';
 import examRoutes from './routes/exam.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import userRoutes from './routes/user.routes.js';
+import reportRoutes from './routes/reportRoutes.js';
 
 const prisma = new PrismaClient();
 
@@ -68,6 +69,7 @@ app.use('/api/lending', lendingRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Health check with database connectivity probe
 app.get('/api/health', async (_req, res) => {

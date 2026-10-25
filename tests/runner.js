@@ -34,6 +34,10 @@ import { runBackupRecoveryTests } from './suites/backupRecovery.test.js';
 import { runSyntheticCohortTests } from './suites/syntheticCohort.test.js';
 import { runMigrationSimulationTests } from './suites/migrationSimulation.test.js';
 import { runDemoPurgeTests } from './suites/demoPurge.test.js';
+import { runReportingFoundationTests } from './suites/reportingFoundation.test.js';
+import { runReportingOverdueLossTests } from './suites/reportingOverdueLoss.test.js';
+import { runReportingInventoryAnalyticsTests } from './suites/reportingInventoryAnalytics.test.js';
+import { runLibrarianAnalyticsUIWorkflowTests } from './suites/librarianAnalyticsUIWorkflow.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -69,6 +73,10 @@ const SUITES = {
   syntheticCohort: { name: 'Synthetic User Cohort Validation & Secure Credential Suite (Phase 9D)', fn: runSyntheticCohortTests },
   migrationSimulation: { name: 'Staging Dry-Run, Migration Simulation & Rollback Suite (Phase 9E)', fn: runMigrationSimulationTests },
   demoPurge: { name: 'Demo Account Cleanup & Provenance Suite (Phase 9F)', fn: runDemoPurgeTests },
+  reportingFoundation: { name: 'Reporting Data Models & Circulation Foundation Suite (Phase 10A)', fn: runReportingFoundationTests },
+  reportingOverdueLoss: { name: 'Overdue, Aging & Loss Analytics Suite (Phase 10B)', fn: runReportingOverdueLossTests },
+  reportingInventoryAnalytics: { name: 'Inventory Condition, Shelf-Audit & Reconciliation Analytics Suite (Phase 10C)', fn: runReportingInventoryAnalyticsTests },
+  librarianAnalyticsUIWorkflow: { name: 'Librarian Analytics Dashboard & UI Workflow Suite (Phase 10D)', fn: runLibrarianAnalyticsUIWorkflowTests },
 };
 
 async function checkHealth(url) {

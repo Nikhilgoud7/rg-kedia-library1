@@ -17,6 +17,7 @@ import {
   UserCircle,
   Settings,
   ShieldCheck,
+  BarChart3,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -27,6 +28,7 @@ export const Sidebar: React.FC = () => {
       case 'LIBRARIAN':
         return [
           { to: '/librarian', label: 'Dashboard', icon: LayoutDashboard },
+          { to: '/librarian/analytics', label: 'Reports & Analytics', icon: BarChart3 },
           { to: '/librarian/books', label: 'Book Inventory', icon: BookOpen },
           { to: '/librarian/requests', label: 'Lending Requests', icon: GitPullRequest },
           { to: '/librarian/issued', label: 'Issued Books & Returns', icon: CheckSquare },

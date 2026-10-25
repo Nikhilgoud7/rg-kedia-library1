@@ -191,22 +191,23 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 4 — Modernization, Compliance & Production Hardening
-- **Current Sub-Phase**: Phase 9F Remediated & Verified (Complete Demo Account Cleanup Workflow Verified, Audit Conditions Remediated)
-- **Gate 4 Status**: Reached / Stage 4 Complete (Phase 9F Remediated & Verified — Ready for Final Independent Audit)
+- **Current Stage**: STAGE 5 — Reports & Analytics, Inventory Condition & Delinquency Governance
+- **Current Sub-Phase**: Phase 10F Complete (Documentation, Backup Verification, Deployment Readiness & Final Audit)
+- **Gate 5 Status**: Reached / Stage 5 Complete (Phase 10F Finalized — Ready for Explicit Milestone Commit Approval)
 - **Branch Status**: `main`
 - **Working Tree**: Preserved uncommitted changes for independent audit per project standards
-- **Verification Status**: 1,686 / 1,686 regression test assertions passing across 33 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean.
+- **Verification Status**: 2,009 / 2,009 regression test assertions passing across 37 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 33
-- **Total Test Assertions**: 1686 (1686 Passed, 0 Failed, 0 Skipped)
+- **Total Test Suites**: 37
+- **Total Test Assertions**: 2009 (2009 Passed, 0 Failed, 0 Skipped)
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
 - **Data Safety & Privacy**: DPDP Act 2023 compliance framework documented (`docs/DPDP_COMPLIANCE.md`), self-service DSAR export (`GET /api/user/data-export`), masked student identities, safe borrower projections, strict RBAC, formula injection neutralization, test branch PII policy documented
-- **Physical Inventory**: Fully operational barcode assignment, batch copy creation, safe withdrawal, and self-healing reconciliation
-- **Zero-Fine Policy**: Strict zero-fine enforcement across all borrowing, overdue, lost, and damaged materials per RG-Kedia College policy
+- **Reports & Analytics**: 4 reporting APIs (Circulation, Top Borrowed, Overdue Aging, Inventory Condition), 4-tab React dashboard at `/librarian/analytics`, strict RFC 4180 CSV export with formula injection defense
+- **Delinquency Governance**: 4 non-overlapping calendar-day aging tiers at UTC midnight, zero-monetary fines reconciliation disclosure, catalog loss/damage metrics
+- **Physical Inventory & Reconciliation**: Fully operational barcode assignment, batch copy creation, safe withdrawal, condition grade distribution (Good, Fair, Poor, Damaged), shelf location coverage tracking, and `AuditLog` drift tracking
 - **Storage Subsystem**: Zero-cost PostgreSQL-backed storage adapter (`BookCover`), in-memory Sharp WebP processing <= 50 KB, zero production disk writes, complete SSRF protection
 
 ## Active Test Commands
@@ -244,9 +245,14 @@
 - **Synthetic User Cohort & Secure Credential Suite**: `npm run test:cohort`
 - **Staging Dry-Run, Migration Simulation & Rollback Suite**: `npm run test:migration`
 - **Demo Account Provenance & Purge Suite**: `npm run test:demo-purge`
+- **Reporting Foundation Suite (Phase 10A)**: `node tests/runner.js --allow-tests --suite=reportingFoundation`
+- **Overdue, Aging & Loss Suite (Phase 10B)**: `node tests/runner.js --allow-tests --suite=reportingOverdueLoss`
+- **Inventory Condition & Shelf Suite (Phase 10C)**: `node tests/runner.js --allow-tests --suite=reportingInventoryAnalytics`
+- **Librarian Analytics UI Workflow Suite (Phase 10D)**: `node tests/runner.js --allow-tests --suite=librarianAnalyticsUIWorkflow`
 - **CLI Migration Simulation Utility**: `npm run migration:simulate`
 - **CLI Demo Account Purge Utility**: `npm run demo:purge`
 
 ## Next Up
-- Stage 4 Complete: Milestone Gate 4 reached (`docs/GATE_4_REPORT.md`)
-- Phase 9F remediated and verified. Ready for final independent audit. Awaiting user authorization.
+- Stage 5 Complete: Milestone Gate 5 reached (`docs/GATE_5_REPORT.md`)
+- Phase 10A-10F fully implemented, audited, and verified across all 37 regression suites (2,009 assertions passing).
+- Ready for explicit Milestone commit authorization.

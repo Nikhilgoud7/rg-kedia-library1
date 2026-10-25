@@ -22,6 +22,7 @@ import LibrarianProfile from './pages/librarian/Profile';
 import LibrarianSettings from './pages/librarian/Settings';
 import LibrarianNotifications from './pages/librarian/Notifications';
 import LibrarianAuditLogs from './pages/librarian/AuditLogs';
+import AnalyticsDashboard from './pages/librarian/AnalyticsDashboard';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -208,6 +209,15 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['LIBRARIAN']}>
                 <LibrarianAuditLogs />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/librarian/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <AnalyticsDashboard />
               </ProtectedRoute>
             }
           />
