@@ -38,6 +38,12 @@ import { runReportingFoundationTests } from './suites/reportingFoundation.test.j
 import { runReportingOverdueLossTests } from './suites/reportingOverdueLoss.test.js';
 import { runReportingInventoryAnalyticsTests } from './suites/reportingInventoryAnalytics.test.js';
 import { runLibrarianAnalyticsUIWorkflowTests } from './suites/librarianAnalyticsUIWorkflow.test.js';
+import { runAuditFoundationTests } from './suites/auditFoundation.test.js';
+import { runAuditMonthlyQuarterlyTests } from './suites/auditMonthlyQuarterly.test.js';
+import { runAuditPhysicalInventoryTests } from './suites/auditPhysicalInventory.test.js';
+import { runAuditDiscrepancyManagementTests } from './suites/auditDiscrepancyManagement.test.js';
+import { runAuditAnnualInstitutionalTests } from './suites/auditAnnualInstitutional.test.js';
+import { runAuditFinalIntegrationTests } from './suites/auditFinalIntegration.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -77,6 +83,12 @@ const SUITES = {
   reportingOverdueLoss: { name: 'Overdue, Aging & Loss Analytics Suite (Phase 10B)', fn: runReportingOverdueLossTests },
   reportingInventoryAnalytics: { name: 'Inventory Condition, Shelf-Audit & Reconciliation Analytics Suite (Phase 10C)', fn: runReportingInventoryAnalyticsTests },
   librarianAnalyticsUIWorkflow: { name: 'Librarian Analytics Dashboard & UI Workflow Suite (Phase 10D)', fn: runLibrarianAnalyticsUIWorkflowTests },
+  auditFoundation: { name: 'Audit Dashboard & Management Foundation Suite (Phase 11A)', fn: runAuditFoundationTests },
+  auditMonthlyQuarterly: { name: 'Monthly & Quarterly Operational Audits Suite (Phase 11B)', fn: runAuditMonthlyQuarterlyTests },
+  auditPhysicalInventory: { name: 'Audit Physical Inventory Suite (Phase 11C)', fn: runAuditPhysicalInventoryTests },
+  auditDiscrepancyManagement: { name: 'Audit Discrepancy & Corrective Action Suite (Phase 11D)', fn: runAuditDiscrepancyManagementTests },
+  auditAnnualInstitutional: { name: 'Annual Institutional Audit Suite (Phase 11E)', fn: runAuditAnnualInstitutionalTests },
+  auditFinalIntegration: { name: 'Audit Evidence Export & Final Integration Suite (Phase 11F)', fn: runAuditFinalIntegrationTests },
 };
 
 async function checkHealth(url) {
@@ -162,12 +174,22 @@ async function main() {
 
   // Determine target suites
   const suitesToRun = [];
-  const matchingKey = suiteArg ? Object.keys(SUITES).find((k) => k.toLowerCase() === suiteArg.toLowerCase()) : null;
-  if (matchingKey && SUITES[matchingKey]) {
-    suitesToRun.push({ key: matchingKey, ...SUITES[matchingKey] });
+  if (suiteArg && suiteArg.includes(',')) {
+    const keys = suiteArg.split(',').map((k) => k.trim());
+    for (const rawKey of keys) {
+      const match = Object.keys(SUITES).find((k) => k.toLowerCase() === rawKey.toLowerCase());
+      if (match && SUITES[match]) {
+        suitesToRun.push({ key: match, ...SUITES[match] });
+      }
+    }
   } else {
-    for (const [key, value] of Object.entries(SUITES)) {
-      suitesToRun.push({ key, ...value });
+    const matchingKey = suiteArg ? Object.keys(SUITES).find((k) => k.toLowerCase() === suiteArg.toLowerCase()) : null;
+    if (matchingKey && SUITES[matchingKey]) {
+      suitesToRun.push({ key: matchingKey, ...SUITES[matchingKey] });
+    } else {
+      for (const [key, value] of Object.entries(SUITES)) {
+        suitesToRun.push({ key, ...value });
+      }
     }
   }
 

@@ -397,6 +397,19 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
         }
       }
 
+      // Institutional Audit Evidence Protection:
+      // Prevent deleting users with associated institutional audit leadership, inventory scans, or corrective actions
+      const [auditCount, scanCount, actionCount] = await Promise.all([
+        (tx as any).libraryAudit?.count({ where: { leadLibrarianId: targetUser.id } }) ?? 0,
+        (tx as any).inventoryAuditScan?.count({ where: { scannedById: targetUser.id } }) ?? 0,
+        (tx as any).auditCorrectiveAction?.count({ where: { performedById: targetUser.id } }) ?? 0,
+      ]);
+      if (auditCount > 0 || scanCount > 0 || actionCount > 0) {
+        throw new AdminGuardError(
+          'Cannot delete user: user is associated with institutional audit evidence, inventory scans, or corrective action records.'
+        );
+      }
+
       await tx.user.delete({ where: { id: req.params.id } });
 
       await logAdminAction({

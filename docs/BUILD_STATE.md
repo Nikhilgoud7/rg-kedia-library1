@@ -1,10 +1,42 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Phase 9E)**: `fb7a7c55603badb98d9f49ec6c95390b82828b21`
-- **Current Head**: Phase 9F Implemented & Verified (Complete Demo Account Cleanup Workflow, 1,674 Total Regression Assertions Across 33 Suites, Stage 4 Gate 4 Reached)
+- **Committed Baseline (Stage 5 / Phase 10F)**: `506236b7b8d21e10ed0204a02fb4721ba00d3360` (`506236b`)
+- **Current Head**: Phase 11 Complete & Verified (Institutional Audit & Library Operations Management Subsystem: 2,213 Total Regression Assertions Across 43 Suites)
 
 ## Completed Sub-Phases
+- **Phase 11A**: Audit Dashboard & Management Foundation (`auditFoundation.test.js` — 44 assertions).
+  - Standardized institutional audit identifier format (`AUD-YYYY-MXX-NNN`, `AUD-YYYY-QXX-NNN`, `AUD-YYYY-INV-NNN`, `AUD-YYYY-ANN-NNN`).
+  - State machine lifecycle with strict valid transitions: `NOT_STARTED` -> `IN_PROGRESS` -> `PENDING_RECONCILIATION` -> `COMPLETED` -> `CLOSED`.
+  - Positive period validation and active audit duplicate collision rejection (HTTP 409).
+  - Executive dashboard aggregating totals, engagement statuses, open discrepancies, and recent engagements.
+- **Phase 11B**: Monthly & Quarterly Operational Audits (`auditMonthlyQuarterly.test.js` — 34 assertions).
+  - Automated operational data compilation synthesizing collection inventory, circulation transactions, and overdue/loss delinquency.
+  - 3-month quarterly consolidation with top-borrowed titles analysis and administrative audit trail verification.
+  - Immutable snapshot freezing (`snapshotData` JSON string) upon completion, guaranteeing that historical audits remain tamper-proof and reproducible.
+- **Phase 11C**: Six-Monthly Physical Inventory Audit (`auditPhysicalInventory.test.js` — 39 assertions).
+  - Session-based physical barcode scanning workspace with hardware barcode scanner support (autofocus & Enter key handling).
+  - Real-time match classification: `MATCHED`, `SHELF_MISMATCH`, `STATUS_CONFLICT`, `UNREGISTERED`.
+  - Defensive duplicate scan protection rejecting repeated scans in the same session (HTTP 409) to prevent artificial count inflation.
+  - Issued-book safeguarding: legitimately borrowed books are accounted for and excluded from missing inventory lists.
+  - Non-destructive finalization: converts scan exceptions and unscanned available copies into formal `AuditDiscrepancy` records without deleting or mutating catalog `BookCopy` records.
+- **Phase 11D**: Discrepancy & Corrective Action Management (`auditDiscrepancyManagement.test.js` — 27 assertions).
+  - Structured discrepancy tracking across 9 standardized institutional categories (`MISSING_PHYSICAL_BOOK`, `DAMAGED_BOOK`, `INCORRECT_BARCODE`, `DUPLICATE_BARCODE`, `INCORRECT_SHELF_LOCATION`, `INVENTORY_COUNT_MISMATCH`, `UNREGISTERED_PHYSICAL_BOOK`, `INCORRECT_STATUS`, `OTHER`).
+  - Workflow state machine: `OPEN` -> `UNDER_INVESTIGATION` -> `ACTION_REQUIRED` -> `RESOLVED` -> `CLOSED`.
+  - Comprehensive corrective action history audit trail (`AuditCorrectiveAction`) recording action taken, actor ID, and timestamps.
+  - Terminal state locking: once a discrepancy is `CLOSED`, it becomes permanently immutable.
+- **Phase 11E**: Annual Institutional Audit (`auditAnnualInstitutional.test.js` — 21 assertions).
+  - Aligned with the Osmania University statutory academic year boundary (**June 1 to May 31**).
+  - Comprehensive collection development analysis: opening titles/copies, acquisitions during AY, losses/damages, and closing inventory.
+  - Academic program circulation breakdown across B.Com (General / Computer Applications), BBA, B.Sc (Computer Science / Data Science), and Faculty.
+  - Regulatory compliance tracker auditing interim monthly reviews, quarterly consolidations, and physical stock checks.
+  - Comparative prior-year analysis with automated growth calculation or formal institutional disclosure when baseline data is unavailable.
+- **Phase 11F**: Audit Evidence, Reporting & Final Integration (`auditFinalIntegration.test.js` — 39 assertions).
+  - RFC 4180 compliant CSV export engine with Spreadsheet Formula Injection (CSV Injection) neutralization (`=`, `+`, `-`, `@`, `\t`, `\r` escaped with `'`).
+  - Multi-format exports: Operational Summary CSV, Discrepancies CSV, and Physical Inventory Scans CSV.
+  - Official printable audit certificate styled with R.G. Kedia College letterhead, summary verification table, and dual sign-off blocks for Lead Librarian and Principal.
+  - Institutional Audit Evidence Retention & Immutability: Deleting a librarian, scanner, or corrective action author is rejected via `AdminGuardError` (HTTP 400); sealed audits cannot be deleted or reopened; catalog deletion preserves scan/discrepancy evidence.
+  - Total Phase 11 Assertions: 204 passing assertions across 6 suites. Total repository assertions: 2,213 assertions across 43 suites.
 - **Phase 1**: Foundations & Database Setup
 - **Phase 2**: Authentication & Role-Based Access Control
 - **Phase 3A-3F**: Student Catalog, Borrowing, Requests, Notifications, and Settings
@@ -193,9 +225,9 @@
 ## Current Stage & Sub-Phase
 - **Current Stage**: STAGE 5 — Reports & Analytics, Inventory Condition & Delinquency Governance
 - **Current Sub-Phase**: Phase 10F Complete (Documentation, Backup Verification, Deployment Readiness & Final Audit)
-- **Gate 5 Status**: Reached / Stage 5 Complete (Phase 10F Finalized — Ready for Explicit Milestone Commit Approval)
+- **Gate 5 Status**: CLOSED (Final Gate 5 Comprehensive Repository Audit & Documentation Reconciliation Complete; Stage 5 / Phases 10A–10F Fully Verified)
 - **Branch Status**: `main`
-- **Working Tree**: Preserved uncommitted changes for independent audit per project standards
+- **Working Tree**: Documentation reconciliation completed (Final Gate 5 report generated, build state updated, demo personas aligned)
 - **Verification Status**: 2,009 / 2,009 regression test assertions passing across 37 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff clean.
 
 ## Metrics Summary

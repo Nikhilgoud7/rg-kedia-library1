@@ -60,7 +60,14 @@
     "test:backup": "node tests/runner.js --allow-tests --suite=backupRecovery",
     "test:cohort": "node tests/runner.js --allow-tests --suite=syntheticCohort",
     "test:migration": "node tests/runner.js --allow-tests --suite=migrationSimulation",
-    "test:demo-purge": "node tests/runner.js --allow-tests --suite=demoPurge"
+    "test:demo-purge": "node tests/runner.js --allow-tests --suite=demoPurge",
+    "test:audit-foundation": "node tests/runner.js --allow-tests --suite=auditFoundation",
+    "test:audit-mq": "node tests/runner.js --allow-tests --suite=auditMonthlyQuarterly",
+    "test:audit-inventory": "node tests/runner.js --allow-tests --suite=auditPhysicalInventory",
+    "test:audit-discrepancy": "node tests/runner.js --allow-tests --suite=auditDiscrepancyManagement",
+    "test:audit-annual": "node tests/runner.js --allow-tests --suite=auditAnnualInstitutional",
+    "test:audit-integration": "node tests/runner.js --allow-tests --suite=auditFinalIntegration",
+    "test:audit-all": "node tests/runner.js --allow-tests --suite=auditFoundation,auditMonthlyQuarterly,auditPhysicalInventory,auditDiscrepancyManagement,auditAnnualInstitutional,auditFinalIntegration"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",

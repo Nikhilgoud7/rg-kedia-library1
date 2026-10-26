@@ -23,6 +23,7 @@ import LibrarianSettings from './pages/librarian/Settings';
 import LibrarianNotifications from './pages/librarian/Notifications';
 import LibrarianAuditLogs from './pages/librarian/AuditLogs';
 import AnalyticsDashboard from './pages/librarian/AnalyticsDashboard';
+import AuditManagement from './pages/librarian/AuditManagement';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';

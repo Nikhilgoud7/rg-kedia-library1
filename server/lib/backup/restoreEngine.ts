@@ -107,6 +107,11 @@ export async function restoreDatabaseBackup(
     await prisma.$transaction(
       async (tx) => {
         // A. Clean up in reverse dependency order using the transaction client
+        await (tx as any).auditCorrectiveAction?.deleteMany({}).catch(() => {});
+        await (tx as any).auditDiscrepancy?.deleteMany({}).catch(() => {});
+        await (tx as any).inventoryAuditScan?.deleteMany({}).catch(() => {});
+        await (tx as any).inventoryAuditSession?.deleteMany({}).catch(() => {});
+        await (tx as any).libraryAudit?.deleteMany({}).catch(() => {});
         await tx.auditLog.deleteMany({});
         await tx.notification.deleteMany({});
         await tx.examPaper.deleteMany({});

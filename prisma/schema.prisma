@@ -38,7 +38,10 @@ model User {
   bookRequests       BookRequest[]
   examPapersUploaded ExamPaper[]
   notifications      Notification[]
-  auditLogs          AuditLog[]
+  auditLogs              AuditLog[]
+  auditsLed              LibraryAudit[]
+  inventoryScans         InventoryAuditScan[]
+  auditActionsPerformed  AuditCorrectiveAction[]
 }
 
 // ─── Books ──────────────────────────────────────────────
@@ -64,7 +67,8 @@ model Book {
   copies       BookCopy[]
   requests     BookRequest[]
   bookPrograms BookProgram[]
-  cover        BookCover?
+  cover              BookCover?
+  auditDiscrepancies AuditDiscrepancy[]
 }
 
 // Dedicated binary cover image storage
@@ -103,7 +107,9 @@ model BookCopy {
   shelfLocation String?
 
   book     Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  lendings Lending[]
+  lendings           Lending[]
+  inventoryScans     InventoryAuditScan[]
+  auditDiscrepancies AuditDiscrepancy[]
 
   @@unique([bookId, copyNumber])
   @@index([status])
@@ -200,4 +206,117 @@ model AuditLog {
   @@index([actorId])
   @@index([action])
   @@index([timestamp])
+}
+
+
+// ─── Phase 11: Institutional Audit & Operations Management ──────
+
+model LibraryAudit {
+  id              String    @id @default(uuid())
+  auditNumber     String    @unique // e.g. "AUD-2026-M10-001"
+  type            String    // MONTHLY | QUARTERLY | SEMI_ANNUAL_INVENTORY | ANNUAL
+  title           String
+  periodStart     DateTime
+  periodEnd       DateTime
+  academicYear    String?   // e.g. "2026-2027"
+  status          String    @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | PENDING_RECONCILIATION | COMPLETED | CLOSED
+  leadLibrarianId String
+  observations    String?
+  recommendations String?
+  snapshotData    String?   // Frozen JSON snapshot upon completion
+  completedAt     DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  leadLibrarian    User                   @relation(fields: [leadLibrarianId], references: [id], onDelete: Restrict)
+  inventorySession InventoryAuditSession?
+  discrepancies    AuditDiscrepancy[]
+
+  @@index([type, status])
+  @@index([periodStart, periodEnd])
+  @@index([academicYear])
+}
+
+model InventoryAuditSession {
+  id               String    @id @default(uuid())
+  auditId          String    @unique
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  totalExpected    Int       @default(0)
+  totalScanned     Int       @default(0)
+  totalMatched     Int       @default(0)
+  totalMissing     Int       @default(0)
+  totalIssued      Int       @default(0)
+  totalSurplus     Int       @default(0)
+  totalDiscrepancy Int       @default(0)
+  status           String    @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED | ABORTED
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  audit LibraryAudit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  scans InventoryAuditScan[]
+
+  @@index([status])
+}
+
+model InventoryAuditScan {
+  id           String   @id @default(uuid())
+  sessionId    String
+  barcode      String
+  bookCopyId   String?
+  scannedAt    DateTime @default(now())
+  scannedById  String
+  matchStatus  String   // MATCHED | SHELF_MISMATCH | STATUS_CONFLICT | UNREGISTERED
+  scannedShelf String?
+  notes        String?
+
+  session   InventoryAuditSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scannedBy User                  @relation(fields: [scannedById], references: [id], onDelete: Restrict)
+  bookCopy  BookCopy?             @relation(fields: [bookCopyId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, barcode])
+  @@index([sessionId, matchStatus])
+}
+
+model AuditDiscrepancy {
+  id              String    @id @default(uuid())
+  auditId         String
+  bookId          String?
+  bookCopyId      String?
+  barcode         String?
+  category        String    // MISSING_PHYSICAL_BOOK | DAMAGED_BOOK | INCORRECT_BARCODE | DUPLICATE_BARCODE | INCORRECT_SHELF_LOCATION | INVENTORY_COUNT_MISMATCH | UNREGISTERED_PHYSICAL_BOOK | INCORRECT_STATUS | OTHER
+  severity        String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  description     String
+  discoveredDate  DateTime  @default(now())
+  status          String    @default("OPEN") // OPEN | UNDER_INVESTIGATION | ACTION_REQUIRED | RESOLVED | CLOSED
+  resolutionNotes String?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  audit             LibraryAudit            @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  book              Book?                   @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  bookCopy          BookCopy?               @relation(fields: [bookCopyId], references: [id], onDelete: SetNull)
+  correctiveActions AuditCorrectiveAction[]
+
+  @@index([auditId, status])
+  @@index([category])
+}
+
+model AuditCorrectiveAction {
+  id              String   @id @default(uuid())
+  discrepancyId   String
+  actionTaken     String
+  actionDate      DateTime @default(now())
+  performedById   String
+  resultingStatus String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  discrepancy AuditDiscrepancy @relation(fields: [discrepancyId], references: [id], onDelete: Cascade)
+  performedBy User             @relation(fields: [performedById], references: [id], onDelete: Restrict)
+
+  @@index([discrepancyId])
 }

@@ -207,16 +207,16 @@ When `DEMO_MODE=true` is enabled:
 - Demo accounts cannot have passwords changed or be deleted via the API (HTTP 403 Forbidden).
 
 ### Seeded Persona Credentials:
-- **Librarian**: `librarian@demo.rgkedia.local` (Password: `DemoPass@1234`)
+- **Librarian**: `demo.librarian@demo.rgkedia.local` (Password: `DemoPass@1234`)
 - **Teachers**:
-  - `teacher.cse@demo.rgkedia.local`
-  - `teacher.ece@demo.rgkedia.local`
-  - `teacher.mech@demo.rgkedia.local`
+  - `demo.teacher1@demo.rgkedia.local` (B.Com General)
+  - `demo.teacher2@demo.rgkedia.local` (B.Sc Computer Science & Data)
+  - `demo.teacher3@demo.rgkedia.local` (BBA General Business Admin)
   (Password: `DemoPass@1234`)
 - **Students**:
-  - `student.cse1@demo.rgkedia.local` (Roll: `24CSE001`)
-  - `student.cse2@demo.rgkedia.local` (Roll: `24CSE002`)
-  - `student.ece1@demo.rgkedia.local` (Roll: `24ECE001`)
-  - `student.ece2@demo.rgkedia.local` (Roll: `24ECE002`)
-  - `student.mech1@demo.rgkedia.local` (Roll: `24MECH001`)
+  - `demo.student1@demo.rgkedia.local` (Roll: `1052-24-401-001`, B.Com Computer Applications)
+  - `demo.student2@demo.rgkedia.local` (Roll: `1052-24-401-045`, B.Com Business Analytics)
+  - `demo.student3@demo.rgkedia.local` (Roll: `1052-24-402-012`, BBA General Business Admin)
+  - `demo.student4@demo.rgkedia.local` (Roll: `1052-24-403-008`, B.Sc Computer Science & Data)
+  - `demo.student5@demo.rgkedia.local` (Roll: `1052-24-401-099`, B.Com Honors)
   (Password: `DemoPass@1234`)

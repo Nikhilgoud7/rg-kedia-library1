@@ -115,11 +115,11 @@ The login page features 1-click test fill buttons:
 
 | Role | Username / Identifier | Password | Program / Branch |
 |---|---|---|---|
-| **👤 Librarian Admin** | `librarian@rgkedia.edu.in` | `admin123` | Library Administration |
-| **👨‍🏫 Faculty Member** | `sunitha.commerce@rgkedia.edu.in` | `password123` | B.Com Faculty |
-| **🎓 Student (B.Com)** | `1052-24-401-001` | `password123` | B.Com Computer Applications (Sem 3) |
-| **🎓 Student (B.Sc)** | `1052-24-403-008` | `password123` | B.Sc Computer Science & Data (Sem 4) |
-| **🎓 Student (BBA)** | `1052-24-402-012` | `password123` | BBA Business Administration (Sem 1) |
+| **👤 Librarian Admin** | `demo.librarian@demo.rgkedia.local` | `DemoPass@1234` | Library Administration |
+| **👨‍🏫 Faculty Member** | `demo.teacher1@demo.rgkedia.local` | `DemoPass@1234` | B.Com Faculty (General) |
+| **🎓 Student (B.Com)** | `1052-24-401-001` (`demo.student1@demo.rgkedia.local`) | `DemoPass@1234` | B.Com Computer Applications (Sem 3) |
+| **🎓 Student (B.Sc)** | `1052-24-403-008` (`demo.student4@demo.rgkedia.local`) | `DemoPass@1234` | B.Sc Computer Science & Data (Sem 4) |
+| **🎓 Student (BBA)** | `1052-24-402-012` (`demo.student3@demo.rgkedia.local`) | `DemoPass@1234` | BBA Business Administration (Sem 1) |
 
 ---
 
