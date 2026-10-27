@@ -44,6 +44,7 @@ import { runAuditPhysicalInventoryTests } from './suites/auditPhysicalInventory.
 import { runAuditDiscrepancyManagementTests } from './suites/auditDiscrepancyManagement.test.js';
 import { runAuditAnnualInstitutionalTests } from './suites/auditAnnualInstitutional.test.js';
 import { runAuditFinalIntegrationTests } from './suites/auditFinalIntegration.test.js';
+import { runAuditRouteTests } from './suites/auditRouteIntegration.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -89,6 +90,7 @@ const SUITES = {
   auditDiscrepancyManagement: { name: 'Audit Discrepancy & Corrective Action Suite (Phase 11D)', fn: runAuditDiscrepancyManagementTests },
   auditAnnualInstitutional: { name: 'Annual Institutional Audit Suite (Phase 11E)', fn: runAuditAnnualInstitutionalTests },
   auditFinalIntegration: { name: 'Audit Evidence Export & Final Integration Suite (Phase 11F)', fn: runAuditFinalIntegrationTests },
+  auditRoute: { name: 'Audit Route & UI Integrity Suite (Phase 12B)', fn: runAuditRouteTests },
 };
 
 async function checkHealth(url) {

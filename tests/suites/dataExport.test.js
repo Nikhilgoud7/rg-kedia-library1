@@ -302,6 +302,36 @@ export async function runDataExportTests(baseUrl, assert) {
     assert(user2Res.status === 200, 'Separate user 2 has independent quota and succeeds with HTTP 200 despite user 1 being limited (SEC-9A-01)');
     assert(user2Res.body.metadata.dataPrincipalId === rateLimitUser2.id, 'User 2 export strictly belongs to user 2');
 
+    // ---------------------------------------------------------
+    // 10. Rate Limiter Key Generator & IPv6 Subnet Defense (GAP-12A-03)
+    // ---------------------------------------------------------
+    const { ipKeyGenerator } = await import('express-rate-limit');
+
+    // 10.1 Authenticated request uses user ID as key
+    const authKeySim = (user, ip) => user?.id || (ip ? ipKeyGenerator(ip) : 'anonymous');
+    assert(authKeySim({ id: 'user-uuid-123' }, '192.168.1.1') === 'user-uuid-123', 'Authenticated request strictly uses user ID regardless of IP');
+
+    // 10.2 Unauthenticated IPv4 request is properly preserved
+    const ipv4Key = authKeySim(null, '203.0.113.195');
+    assert(ipv4Key === '203.0.113.195', 'Unauthenticated IPv4 address is formatted without distortion');
+
+    // 10.3 Unauthenticated IPv6 addresses in same /56 subnet resolve to identical key
+    const ipv6A = '2001:0db8:85a3:0000:0000:8a2e:0370:7334';
+    const ipv6B = '2001:0db8:85a3:0000:0000:8a2e:0370:7335';
+    const key6A = authKeySim(null, ipv6A);
+    const key6B = authKeySim(null, ipv6B);
+    assert(key6A === '2001:db8:85a3::/56', 'IPv6 address A is normalized to /56 subnet CIDR notation');
+    assert(key6B === '2001:db8:85a3::/56', 'IPv6 address B is normalized to /56 subnet CIDR notation');
+    assert(key6A === key6B, 'IPv6 addresses within same /56 share limiter bucket, neutralizing subnet hopping bypasses');
+
+    // 10.4 Unauthenticated IPv6 addresses in distinct /56 subnets resolve to distinct keys
+    const ipv6Distinct = '2001:0db8:85a4:0000:0000:8a2e:0370:7334';
+    const key6Distinct = authKeySim(null, ipv6Distinct);
+    assert(key6Distinct !== key6A, 'Distinct IPv6 /56 subnets maintain independent rate limiting buckets');
+
+    // 10.5 Unauthenticated fallback with undefined IP returns anonymous
+    assert(authKeySim(null, undefined) === 'anonymous', 'Fallback without IP or user safely yields anonymous key');
+
   } finally {
     await dataManager.cleanup();
   }

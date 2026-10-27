@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import prisma, { authenticate, AuthRequest } from '../middleware/auth.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
 
@@ -11,7 +11,7 @@ const dataExportLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.user?.id || req.ip || 'anonymous',
+  keyGenerator: (req: any) => req.user?.id || (req.ip ? ipKeyGenerator(req.ip) : 'anonymous'),
   statusCode: 429,
   message: { error: 'Too many personal data export requests. Please try again after 15 minutes.' },
 });

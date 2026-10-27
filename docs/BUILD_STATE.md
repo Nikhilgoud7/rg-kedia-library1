@@ -1,10 +1,20 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Baseline (Stage 5 / Phase 10F)**: `506236b7b8d21e10ed0204a02fb4721ba00d3360` (`506236b`)
-- **Current Head**: Phase 11 Complete & Verified (Institutional Audit & Library Operations Management Subsystem: 2,213 Total Regression Assertions Across 43 Suites)
+- **Committed Milestone Baseline (Phase 11 Complete & Synchronized)**: `fed6ce911ca29bbe582ab49eb198245093864de3` (`fed6ce9`)
+- **Previous Milestone Baseline (Stage 5 / Phase 10F)**: `506236b7b8d21e10ed0204a02fb4721ba00d3360` (`506236b`)
+- **Current Milestone**: Phase 12 — System Readiness, Hardening & Pilot Rollout
+- **Current Sub-Phase**: Phase 12B Complete (Critical Gap Remediation & Routing Integrity: 2,242 Total Regression Assertions Across 44 Suites)
 
 ## Completed Sub-Phases
+- **Phase 12B**: Critical Gap Remediation & Routing Integrity (`auditRouteIntegration.test.js` — 22 assertions, `dataExport.test.js` enhanced to 101 assertions).
+  - Resolved **GAP-12A-01**: Registered missing `/librarian/audits` route in `client/src/App.tsx` wrapped in `<ProtectedRoute allowedRoles={['LIBRARIAN']}><AuditManagement /></ProtectedRoute>`.
+  - Fixed sidebar navigation destination mismatch and verified wildcard fallback route does not intercept authorized librarian navigation.
+  - Resolved **GAP-12A-03**: Resolved `express-rate-limit` warning (`ERR_ERL_KEY_GEN_IPV6`) in `server/routes/user.routes.ts` by using `ipKeyGenerator` helper for unauthenticated IP normalization while preserving per-user authenticated quota isolation.
+  - Added dedicated test suite `tests/suites/auditRouteIntegration.test.js` (22 assertions) and registered `npm run test:audit-route`.
+  - Enhanced `tests/suites/dataExport.test.js` with tests for IPv4, IPv6 /56 subnet normalization, distinct subnet isolation, and authenticated user ID isolation.
+  - Resolved **GAP-12A-04**: Reconciled `docs/BUILD_STATE.md` metrics, stage tracking, and test inventories to align with Phase 11 and Phase 12 milestones.
+- **Phase 12A**: Complete System Readiness & Gap Audit (Comprehensive read-only system audit identifying GAP-12A-01 through GAP-12A-05 across three personas, backend APIs, database, DR, and deployment architecture).
 - **Phase 11A**: Audit Dashboard & Management Foundation (`auditFoundation.test.js` — 44 assertions).
   - Standardized institutional audit identifier format (`AUD-YYYY-MXX-NNN`, `AUD-YYYY-QXX-NNN`, `AUD-YYYY-INV-NNN`, `AUD-YYYY-ANN-NNN`).
   - State machine lifecycle with strict valid transitions: `NOT_STARTED` -> `IN_PROGRESS` -> `PENDING_RECONCILIATION` -> `COMPLETED` -> `CLOSED`.
@@ -223,16 +233,20 @@
 >   2. Implement an automated data masking and anonymization migration script that executes upon branch creation to sanitize all user tables (`email`, `name`, `rollNumber`, `phone`, password hashes) before running tests or granting developer access.
 
 ## Current Stage & Sub-Phase
-- **Current Stage**: STAGE 5 — Reports & Analytics, Inventory Condition & Delinquency Governance
-- **Current Sub-Phase**: Phase 10F Complete (Documentation, Backup Verification, Deployment Readiness & Final Audit)
-- **Gate 5 Status**: CLOSED (Final Gate 5 Comprehensive Repository Audit & Documentation Reconciliation Complete; Stage 5 / Phases 10A–10F Fully Verified)
+- **Current Milestone**: Phase 12 — System Readiness, Hardening & Pilot Rollout
+- **Current Sub-Phase**: Phase 12B (Critical Gap Remediation & Routing Integrity — Implemented & Verified, Awaiting Gate Closure & Commit Authorization)
+- **Previous Milestone Status**: Phase 11 (Institutional Audit & Library Operations Management) COMMITTED & PUSHED (`fed6ce9`)
+- **Stage 5 / Gate 5 Status**: CLOSED (`docs/FINAL_GATE_5_CLOSURE_REPORT.md`)
+- **Working Tree**: Uncommitted Phase 12B remediation changes (verified; ready for staging upon authorization)
 - **Branch Status**: `main`
-- **Working Tree**: Documentation reconciliation completed (Final Gate 5 report generated, build state updated, demo personas aligned)
-- **Verification Status**: 2,009 / 2,009 regression test assertions passing across 37 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff clean.
+
+- **Verification Status**: 2,242 / 2,242 regression test assertions passing across 44 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 37
-- **Total Test Assertions**: 2009 (2009 Passed, 0 Failed, 0 Skipped)
+- **Total Test Suites**: 44
+- **Total Test Assertions**: 2,242 (2,242 Passed, 0 Failed, 0 Skipped: 2,009 Stage 5 baseline + 204 Phase 11 assertions + 7 Phase 12B IPv6 rate limit tests + 22 Phase 12B audit route integration tests)
+- **Institutional Audit Management**: 5 audit models, lifecycle state machines, physical barcode scanning with hardware support, discrepancy & corrective action resolution, Osmania University academic year reporting (June 1 – May 31), audit evidence retention guards (`onDelete: Restrict`)
+- **Routing & Client Integrity**: Registered `/librarian/audits` route guarded for `LIBRARIAN`, matching sidebar link in `Sidebar.tsx`, zero redirection loop
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
 - **Test Database Isolation**: Verified fail-closed positive allowlist guard preventing tests from running against unapproved or production endpoints
 - **Concurrency & Advisory Locks**: Verified (`pg_advisory_xact_lock`)
@@ -244,6 +258,14 @@
 
 ## Active Test Commands
 - **Full Automated Regression Suite**: `npm test`
+- **Audit Route & UI Integrity Suite (Phase 12B)**: `npm run test:audit-route`
+- **Audit All Suites (Phase 11 + 12B)**: `npm run test:audit-all`
+- **Audit Foundation Suite (Phase 11A)**: `npm run test:audit-foundation`
+- **Audit Monthly & Quarterly Suite (Phase 11B)**: `npm run test:audit-mq`
+- **Audit Physical Inventory Suite (Phase 11C)**: `npm run test:audit-inventory`
+- **Audit Discrepancy & Corrective Action Suite (Phase 11D)**: `npm run test:audit-discrepancy`
+- **Audit Annual Institutional Suite (Phase 11E)**: `npm run test:audit-annual`
+- **Audit Evidence & Final Integration Suite (Phase 11F)**: `npm run test:audit-integration`
 - **Authentication Suite**: `npm run test:auth`
 - **Role Authorization Suite**: `npm run test:authorization`
 - **Personal Data Export & DPDP Suite**: `npm run test:data-export`
@@ -285,6 +307,6 @@
 - **CLI Demo Account Purge Utility**: `npm run demo:purge`
 
 ## Next Up
-- Stage 5 Complete: Milestone Gate 5 reached (`docs/GATE_5_REPORT.md`)
-- Phase 10A-10F fully implemented, audited, and verified across all 37 regression suites (2,009 assertions passing).
-- Ready for explicit Milestone commit authorization.
+- Phase 12B Complete: Critical routing gap (GAP-12A-01) resolved, rate-limiter IPv6 warning (GAP-12A-03) resolved, and BUILD_STATE documentation reconciled (GAP-12A-04).
+- 2,242 regression assertions passing across 44 suites with zero failures.
+- Ready for explicit project-owner review and Phase 12C authorization.

@@ -223,6 +223,15 @@ export const App: React.FC = () => {
             }
           />
 
+          <Route
+            path="/librarian/audits"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <AuditManagement />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Student Routes */}
           <Route
             path="/student"

@@ -67,7 +67,8 @@
     "test:audit-discrepancy": "node tests/runner.js --allow-tests --suite=auditDiscrepancyManagement",
     "test:audit-annual": "node tests/runner.js --allow-tests --suite=auditAnnualInstitutional",
     "test:audit-integration": "node tests/runner.js --allow-tests --suite=auditFinalIntegration",
-    "test:audit-all": "node tests/runner.js --allow-tests --suite=auditFoundation,auditMonthlyQuarterly,auditPhysicalInventory,auditDiscrepancyManagement,auditAnnualInstitutional,auditFinalIntegration"
+    "test:audit-route": "node tests/runner.js --allow-tests --suite=auditRoute",
+    "test:audit-all": "node tests/runner.js --allow-tests --suite=auditFoundation,auditMonthlyQuarterly,auditPhysicalInventory,auditDiscrepancyManagement,auditAnnualInstitutional,auditFinalIntegration,auditRoute"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",
