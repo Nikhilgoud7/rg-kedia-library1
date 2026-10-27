@@ -466,7 +466,7 @@ export class InventoryAuditService {
           data: { status: 'PENDING_RECONCILIATION' },
         });
       }
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     await logAdminAction({
       actorId,

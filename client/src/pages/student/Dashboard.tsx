@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
+import { downloadExamPaper } from '../../lib/downloadExamPaper';
 import { Lending, Book, ExamPaper } from '../../types';
 import StatCard from '../../components/common/StatCard';
 import BookCard from '../../components/common/BookCard';
@@ -358,12 +359,11 @@ export const StudentDashboard: React.FC = () => {
             ) : (
               <div className="space-y-2.5">
                 {recentExamPapers.map((paper) => (
-                  <a
+                  <button
                     key={paper.id}
-                    href={paper.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-3 rounded-xl border border-slate-100 hover:border-amber-300 hover:bg-amber-50/30 transition flex items-center justify-between gap-2 block group"
+                    type="button"
+                    onClick={() => downloadExamPaper(paper)}
+                    className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-amber-300 hover:bg-amber-50/30 transition flex items-center justify-between gap-2 block group cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
                       <FileText className="w-4 h-4 text-amber-500 shrink-0" />
@@ -379,7 +379,7 @@ export const StudentDashboard: React.FC = () => {
                     <span className="text-[10px] font-extrabold bg-slate-100 text-slate-700 px-2 py-0.5 rounded group-hover:bg-amber-500 group-hover:text-slate-950 transition">
                       Download
                     </span>
-                  </a>
+                  </button>
                 ))}
               </div>
             )}

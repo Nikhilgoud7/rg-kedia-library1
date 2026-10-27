@@ -158,21 +158,31 @@ model BookRequest {
 // ─── Exam Guide ─────────────────────────────────────────
 
 model ExamPaper {
-  id           String   @id @default(uuid())
-  title        String
-  subject      String
-  program      String   // BCOM | BBA | BSC
-  branch       String   // specific branch
-  year         Int      // academic year (e.g., 2024)
-  semester     Int      // 1-6
-  type         String   // PREVIOUS_YEAR | IMPORTANT_QUESTIONS | STUDY_GUIDE
-  fileUrl      String   // path to uploaded file
-  description  String?
-  uploadedById String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String    @id @default(uuid())
+  title            String
+  subject          String
+  program          String   // BCOM | BBA | BSC
+  branch           String   // specific branch
+  year             Int      // academic year (e.g., 2024)
+  semester         Int      // 1-6
+  type             String   // PREVIOUS_YEAR | IMPORTANT_QUESTIONS | STUDY_GUIDE
+  fileUrl          String   // path to uploaded file or fallback URL
+  description      String?
+  uploadedById     String
+  storageProvider  String    @default("local") // local | r2 | s3
+  storageKey       String?   // object key in storage bucket or relative disk path
+  originalFileName String?   // original human-readable filename uploaded by faculty
+  mimeType         String?   // validated MIME type (e.g. application/pdf)
+  fileSizeBytes    Int?      // size in bytes
+  checksum         String?   // SHA-256 digest for integrity & migration verification
+  publishedAt      DateTime? // null = pending review / unpublished; timestamp = published
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([publishedAt])
+  @@index([storageProvider])
 }
 
 // ─── Notifications ──────────────────────────────────────

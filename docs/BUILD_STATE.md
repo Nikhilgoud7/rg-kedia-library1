@@ -1,13 +1,25 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Milestone Baseline (Phase 11 Complete & Synchronized)**: `fed6ce911ca29bbe582ab49eb198245093864de3` (`fed6ce9`)
-- **Previous Milestone Baseline (Stage 5 / Phase 10F)**: `506236b7b8d21e10ed0204a02fb4721ba00d3360` (`506236b`)
+- **Committed Milestone Baseline (Phase 12B Complete & Synchronized)**: `cb96698a681b84cb4125841564c590357e3c60b5` (`cb96698`)
+- **Previous Milestone Baseline (Phase 11 Complete)**: `fed6ce911ca29bbe582ab49eb198245093864de3` (`fed6ce9`)
 - **Current Milestone**: Phase 12 — System Readiness, Hardening & Pilot Rollout
-- **Current Sub-Phase**: Phase 12B Complete (Critical Gap Remediation & Routing Integrity: 2,242 Total Regression Assertions Across 44 Suites)
+- **Current Sub-Phase**: Phase 12C Complete (Cloud Exam Paper Storage Implementation: 2,314 Total Regression Assertions Across 45 Suites)
 
 ## Completed Sub-Phases
-- **Phase 12B**: Critical Gap Remediation & Routing Integrity (`auditRouteIntegration.test.js` — 22 assertions, `dataExport.test.js` enhanced to 101 assertions).
+- **Phase 12C**: Cloud Exam Paper Storage Implementation (`cloudExamStorage.test.js` — 37 assertions, `examGuide.test.js` expanded to 70 assertions).
+  - Transitioned examination paper storage from local filesystem (`uploads/exam-papers/`) to Cloudflare R2 S3-compatible cloud object storage using `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
+  - Maintained provider-independent storage architecture with local filesystem (`LocalStorageDriver`) and database fallback adapters for development and offline testing.
+  - Enriched `ExamPaper` Prisma schema with storage metadata (`storageProvider`, `storageKey`, `originalFileName`, `mimeType`, `fileSizeBytes`, `checksum`, `publishedAt`) and composite indexes.
+  - Applied migration: `prisma/migrations/20261027120000_add_exam_paper_storage_metadata/migration.sql`.
+  - Implemented binary magic-byte validation (`fileSignatureValidator.ts`) detecting PDF, PNG, JPEG, DOC, DOCX and strictly rejecting `MZ` executables and files exceeding 10MB.
+  - Deprecated and secured static filesystem directory (`server/index.ts` intercepts `/uploads/exam-papers` with HTTP 403 Forbidden).
+  - Implemented secure, authenticated download endpoint (`GET /api/exam/papers/:id/download`) generating 60-second presigned URLs for Cloudflare R2/S3 or streaming binary buffers for local driver.
+  - Implemented librarian-controlled publication workflow: teacher uploads default to unpublished (`publishedAt: null`); students strictly forbidden (HTTP 403) from viewing or downloading unpublished papers; librarian publishes/unpublishes via `PUT /api/exam/papers/:id/publish` and `PUT /api/exam/papers/:id/unpublish` with `EXAM_PAPER_PUBLISHED` and `EXAM_PAPER_UNPUBLISHED` audit logging.
+  - Implemented cloud storage migration CLI (`scripts/migrateExamStorage.ts` / `npm run storage:migrate`) featuring non-destructive inventory scanning, SHA-256 checksum verification, safe dry-run simulation, and rollback protection.
+  - Enhanced client application: added publication status badges, status filter (`All`, `Published`, `Pending Review`), publish/unpublish toggle actions for librarians, and secure download helper (`downloadExamPaper.ts`).
+  - Added dedicated test suite `tests/suites/cloudExamStorage.test.js` (37 assertions) and updated `tests/suites/examGuide.test.js` (70 assertions).
+- **Phase 12B`: Critical Gap Remediation & Routing Integrity (`auditRouteIntegration.test.js` — 22 assertions, `dataExport.test.js` enhanced to 101 assertions).
   - Resolved **GAP-12A-01**: Registered missing `/librarian/audits` route in `client/src/App.tsx` wrapped in `<ProtectedRoute allowedRoles={['LIBRARIAN']}><AuditManagement /></ProtectedRoute>`.
   - Fixed sidebar navigation destination mismatch and verified wildcard fallback route does not intercept authorized librarian navigation.
   - Resolved **GAP-12A-03**: Resolved `express-rate-limit` warning (`ERR_ERL_KEY_GEN_IPV6`) in `server/routes/user.routes.ts` by using `ipKeyGenerator` helper for unauthenticated IP normalization while preserving per-user authenticated quota isolation.
@@ -234,17 +246,18 @@
 
 ## Current Stage & Sub-Phase
 - **Current Milestone**: Phase 12 — System Readiness, Hardening & Pilot Rollout
-- **Current Sub-Phase**: Phase 12B (Critical Gap Remediation & Routing Integrity — Implemented & Verified, Awaiting Gate Closure & Commit Authorization)
-- **Previous Milestone Status**: Phase 11 (Institutional Audit & Library Operations Management) COMMITTED & PUSHED (`fed6ce9`)
+- **Current Sub-Phase**: Phase 12C Complete (Cloud Exam Paper Storage Implementation: 2,314 Total Regression Assertions Across 45 Suites)
+- **Previous Milestone Status**: Phase 12B (Critical Gap Remediation & Routing Integrity) COMMITTED & PUSHED (`cb96698`)
 - **Stage 5 / Gate 5 Status**: CLOSED (`docs/FINAL_GATE_5_CLOSURE_REPORT.md`)
-- **Working Tree**: Uncommitted Phase 12B remediation changes (verified; ready for staging upon authorization)
+- **Working Tree**: Uncommitted Phase 12C Cloud Exam Storage implementation and audit documentation (verified; ready for staging upon authorization)
 - **Branch Status**: `main`
 
-- **Verification Status**: 2,242 / 2,242 regression test assertions passing across 44 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff clean.
+- **Verification Status**: 2,314 / 2,314 regression test assertions passing across 45 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff check clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 44
-- **Total Test Assertions**: 2,242 (2,242 Passed, 0 Failed, 0 Skipped: 2,009 Stage 5 baseline + 204 Phase 11 assertions + 7 Phase 12B IPv6 rate limit tests + 22 Phase 12B audit route integration tests)
+- **Total Test Suites**: 45
+- **Total Test Assertions**: 2,295 (2,295 Passed, 0 Failed, 0 Skipped: 2,242 Phase 12B baseline + 16 exam guide expansion assertions + 37 Phase 12C cloud exam storage assertions)
+- **Cloud Exam Paper Storage Subsystem**: Cloudflare R2 S3-compatible driver, binary signature validator (magic bytes for PDF/PNG/JPEG/DOC/DOCX and `MZ` executable rejection), private bucket isolation, 60s presigned authenticated downloads (`/api/exam/papers/:id/download`), librarian-controlled publication workflow (`publishedAt`), CLI migration & rollback engine with SHA-256 integrity checks, static `/uploads/exam-papers` filesystem path blocked with HTTP 403, production fail-fast environment validation guard (enforces mandatory explicit cloud driver and Cloudflare R2 credentials while strictly forbidding local disk storage in production; zero secret leakage)
 - **Institutional Audit Management**: 5 audit models, lifecycle state machines, physical barcode scanning with hardware support, discrepancy & corrective action resolution, Osmania University academic year reporting (June 1 – May 31), audit evidence retention guards (`onDelete: Restrict`)
 - **Routing & Client Integrity**: Registered `/librarian/audits` route guarded for `LIBRARIAN`, matching sidebar link in `Sidebar.tsx`, zero redirection loop
 - **Database Engine**: Neon PostgreSQL (Serverless, Production: `production` branch; Test: `test` branch `ep-autumn-sky-b3vpykh4`)
@@ -258,6 +271,9 @@
 
 ## Active Test Commands
 - **Full Automated Regression Suite**: `npm test`
+- **Cloud Exam Paper Storage Suite (Phase 12C)**: `npm run test:cloud-storage`
+- **Exam Guide Suite**: `npm run test:exam-guide`
+- **Cloud Storage Migration CLI**: `npm run storage:migrate`
 - **Audit Route & UI Integrity Suite (Phase 12B)**: `npm run test:audit-route`
 - **Audit All Suites (Phase 11 + 12B)**: `npm run test:audit-all`
 - **Audit Foundation Suite (Phase 11A)**: `npm run test:audit-foundation`

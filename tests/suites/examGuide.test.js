@@ -122,6 +122,35 @@ export async function runExamGuideTests(baseUrl, assert) {
       `Got status ${badExtRes.status}`
     );
 
+    // C2. Disguised executable (.exe renamed to .pdf) -> 400
+    const disguisedExeForm = createPaperFormData({
+      title: 'Disguised Executable File',
+      fileName: 'trojan.pdf',
+      fileContent: 'MZ\x90\x00\x03\x00\x00\x00fake pe header',
+      fileMime: 'application/pdf',
+    });
+    const disguisedExeRes = await librarianClient.request('POST', '/api/exam/papers', { body: disguisedExeForm });
+    assert(
+      disguisedExeRes.status === 400,
+      'Disguised executable (.pdf with MZ header) is rejected with HTTP 400',
+      `Got status ${disguisedExeRes.status}`
+    );
+
+    // C3. Plain text / Corrupt bytes disguised as .pdf -> 400
+    const corruptPdfForm = createPaperFormData({
+      title: 'Corrupt PDF Header',
+      fileName: 'corrupt.pdf',
+      fileContent: 'PLAIN TEXT NOT A PDF',
+      fileMime: 'application/pdf',
+    });
+    const corruptPdfRes = await librarianClient.request('POST', '/api/exam/papers', { body: corruptPdfForm });
+    assert(
+      corruptPdfRes.status === 400,
+      'File with invalid magic bytes is rejected with HTTP 400',
+      `Got status ${corruptPdfRes.status}`
+    );
+
+
     // D. Missing required file -> 400
     const noFileForm = createPaperFormData({ fileName: null });
     const noFileRes = await librarianClient.request('POST', '/api/exam/papers', { body: noFileForm });
@@ -236,6 +265,110 @@ export async function runExamGuideTests(baseUrl, assert) {
     const tch2Paper = tch2UploadRes.data.paper;
     assert(Boolean(tch2Paper && tch2Paper.id), 'Teacher 2 upload response includes valid paper id');
     if (tch2Paper?.fileUrl) uploadedFilesToCleanup.add(tch2Paper.fileUrl);
+
+    // ---------------------------------------------------------
+    // 3B. Phase 12C Publication Approval Workflow & Secure Downloads
+    // ---------------------------------------------------------
+
+    // A. Verify Teacher 1's upload is initially UNPUBLISHED (publishedAt is null)
+    assert(tch1Paper.publishedAt === null || tch1Paper.publishedAt === undefined, 'Teacher upload defaults to unpublished (publishedAt: null)');
+
+    // B. Student cannot view details of unpublished paper -> 403
+    const studentViewUnpublishedRes = await studentClient.request('GET', `/api/exam/papers/${tch1Paper.id}`);
+    assert(
+      studentViewUnpublishedRes.status === 403,
+      'Student is forbidden from viewing unpublished paper details with HTTP 403',
+      `Got status ${studentViewUnpublishedRes.status}`
+    );
+
+    // C. Student cannot download unpublished paper -> 403
+    const studentDownloadUnpublishedRes = await studentClient.request('GET', `/api/exam/papers/${tch1Paper.id}/download`);
+    assert(
+      studentDownloadUnpublishedRes.status === 403,
+      'Student is forbidden from downloading unpublished paper with HTTP 403',
+      `Got status ${studentDownloadUnpublishedRes.status}`
+    );
+
+    // D. Teacher 2 cannot view details of Teacher 1 unpublished paper -> 403
+    const tch2ViewOtherUnpublishedRes = await teacher2Client.request('GET', `/api/exam/papers/${tch1Paper.id}`);
+    assert(
+      tch2ViewOtherUnpublishedRes.status === 403,
+      'Teacher cannot view another teacher unpublished paper with HTTP 403',
+      `Got status ${tch2ViewOtherUnpublishedRes.status}`
+    );
+
+    // E. Teacher 1 CAN view details of own unpublished paper -> 200
+    const tch1ViewOwnUnpublishedRes = await teacher1Client.request('GET', `/api/exam/papers/${tch1Paper.id}`);
+    assert(
+      tch1ViewOwnUnpublishedRes.status === 200,
+      'Teacher 1 can view own unpublished paper with HTTP 200',
+      `Got status ${tch1ViewOwnUnpublishedRes.status}`
+    );
+
+    // F. Non-librarian cannot publish -> 403
+    const teacherPublishRes = await teacher1Client.request('PUT', `/api/exam/papers/${tch1Paper.id}/publish`);
+    assert(
+      teacherPublishRes.status === 403,
+      'Teacher cannot publish paper with HTTP 403 (Librarian only)',
+      `Got status ${teacherPublishRes.status}`
+    );
+
+    // G. Librarian publishes Paper 2 (Teacher 1 upload) -> 200
+    const libPublishRes = await librarianClient.request('PUT', `/api/exam/papers/${tch1Paper.id}/publish`);
+    assert(
+      libPublishRes.status === 200,
+      'Librarian successfully publishes paper with HTTP 200',
+      `Got status ${libPublishRes.status}`
+    );
+    assert(Boolean(libPublishRes.data?.paper?.publishedAt), 'Published paper has non-null publishedAt timestamp');
+
+    // H. Verify AuditLog for EXAM_PAPER_PUBLISHED
+    const publishAudit = await dataManager.prisma.auditLog.findFirst({
+      where: {
+        action: 'EXAM_PAPER_PUBLISHED',
+        targetId: tch1Paper.id,
+      },
+    });
+    assert(Boolean(publishAudit), 'AuditLog recorded EXAM_PAPER_PUBLISHED action');
+    assert(publishAudit?.actorId === librarian.id, 'EXAM_PAPER_PUBLISHED captures librarian actorId');
+
+    // I. Student CAN now download published paper -> 200 or 302
+    const studentDownloadPublishedRes = await studentClient.request('GET', `/api/exam/papers/${tch1Paper.id}/download`);
+    assert(
+      studentDownloadPublishedRes.status === 200 || studentDownloadPublishedRes.status === 302,
+      'Student can successfully download published paper with HTTP 200 or 302 redirect',
+      `Got status ${studentDownloadPublishedRes.status}`
+    );
+
+    // J. Librarian unpublishes Paper 2 -> 200
+    const libUnpublishRes = await librarianClient.request('PUT', `/api/exam/papers/${tch1Paper.id}/unpublish`);
+    assert(
+      libUnpublishRes.status === 200,
+      'Librarian successfully unpublishes paper with HTTP 200',
+      `Got status ${libUnpublishRes.status}`
+    );
+
+    // K. Verify AuditLog for EXAM_PAPER_UNPUBLISHED
+    const unpublishAudit = await dataManager.prisma.auditLog.findFirst({
+      where: {
+        action: 'EXAM_PAPER_UNPUBLISHED',
+        targetId: tch1Paper.id,
+      },
+    });
+    assert(Boolean(unpublishAudit), 'AuditLog recorded EXAM_PAPER_UNPUBLISHED action');
+
+    // L. Student is blocked again -> 403
+    const studentBlockedAgainRes = await studentClient.request('GET', `/api/exam/papers/${tch1Paper.id}/download`);
+    assert(
+      studentBlockedAgainRes.status === 403,
+      'Student is blocked again from downloading unpublished paper with HTTP 403',
+      `Got status ${studentBlockedAgainRes.status}`
+    );
+
+    // M. Re-publish Paper 2 and Paper 3 so all 4 papers are published for listing & pagination tests
+    await librarianClient.request('PUT', `/api/exam/papers/${tch1Paper.id}/publish`);
+    await librarianClient.request('PUT', `/api/exam/papers/${tch2Paper.id}/publish`);
+
 
     // Librarian uploads Paper 4 (BCOM, Sem 1, STUDY_GUIDE) for pagination testing
     const libPaper2Form = createPaperFormData({

@@ -156,4 +156,27 @@ export class DatabaseStorageDriver implements StorageAdapter {
       where: { bookId },
     });
   }
+
+  async exists(key: string): Promise<boolean> {
+    const bookId = extractBookIdFromKey(key);
+    if (!bookId) return false;
+    const count = await this.prisma.bookCover.count({ where: { bookId } });
+    return count > 0;
+  }
+
+  async getMetadata(key: string): Promise<StorageMetadata | null> {
+    const bookId = extractBookIdFromKey(key);
+    if (!bookId) return null;
+    const record = await this.prisma.bookCover.findUnique({
+      where: { bookId },
+      select: { mimeType: true, sizeBytes: true, updatedAt: true },
+    });
+    if (!record) return null;
+    return {
+      mimeType: record.mimeType,
+      sizeBytes: record.sizeBytes,
+      updatedAt: record.updatedAt,
+      bookId,
+    };
+  }
 }

@@ -115,9 +115,17 @@ export interface ExamPaper {
   fileUrl: string;
   description?: string | null;
   uploadedById: string;
+  storageProvider?: string;
+  storageKey?: string | null;
+  originalFileName?: string | null;
+  mimeType?: string | null;
+  fileSizeBytes?: number | null;
+  checksum?: string | null;
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   uploadedBy?: {
+    id?: string;
     name: string;
     role: Role;
   };

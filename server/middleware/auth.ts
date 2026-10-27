@@ -27,6 +27,11 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       token = req.headers.authorization.split(' ')[1];
     }
 
+    // Fallback to query parameter for authenticated download / media requests
+    if (!token && typeof req.query?.token === 'string') {
+      token = req.query.token;
+    }
+
     if (!token) {
       res.status(401).json({ error: 'Access denied. No token provided.' });
       return;

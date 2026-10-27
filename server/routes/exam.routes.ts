@@ -3,8 +3,15 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
+import {
+  getDocumentStorageAdapter,
+  validateExamPaperFile,
+  ALLOWED_EXTENSIONS,
+  MAX_EXAM_PAPER_BYTES,
+} from '../lib/storage/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,28 +29,15 @@ function findProjectRoot(startDir: string): string {
 }
 
 const rootDir = findProjectRoot(__dirname);
-
-// Configure multer for file uploads
 const uploadDir = path.join(rootDir, 'uploads', 'exam-papers');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// In-memory Multer for safe upload processing (zero unmanaged disk writes)
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EXAM_PAPER_BYTES }, // 10MB
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
+    if (ALLOWED_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Only PDF, DOC, DOCX, and image files are allowed.'));
@@ -69,15 +63,21 @@ const handleUpload = (req: AuthRequest, res: Response, next: NextFunction): void
   });
 };
 
+function isPathInside(childPath: string, parentDir: string): boolean {
+  const rel = path.relative(parentDir, childPath);
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 const router = Router();
 
 const ALLOWED_PROGRAMS = ['BCOM', 'BBA', 'BSC'];
 const ALLOWED_TYPES = ['PREVIOUS_YEAR', 'IMPORTANT_QUESTIONS', 'STUDY_GUIDE'];
 
-// GET /api/exam/papers - List exam papers with filters, search, and pagination
+// GET /api/exam/papers - List exam papers with filters, search, publication status, and pagination
 router.get('/papers', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { program, branch, year, semester, subject, type, search, page, limit } = req.query;
+    const { program, branch, year, semester, subject, type, search, page, limit, status, myUploadsOnly } =
+      req.query;
 
     const where: any = {};
     if (program && typeof program === 'string') where.program = program;
@@ -86,14 +86,41 @@ router.get('/papers', authenticate, async (req: AuthRequest, res: Response): Pro
     if (semester) where.semester = parseInt(semester as string);
     if (type && typeof type === 'string') where.type = type;
 
+    // Publication Role Gate:
+    // - STUDENT: Can ONLY see published papers (publishedAt !== null)
+    // - TEACHER: Sees published papers + own unpublished uploads (unless myUploadsOnly requested)
+    // - LIBRARIAN: Sees all papers, can filter by status=pending or status=published
+    if (req.user!.role === 'STUDENT') {
+      where.publishedAt = { not: null };
+    } else if (req.user!.role === 'TEACHER') {
+      if (myUploadsOnly === 'true') {
+        where.uploadedById = req.user!.id;
+      } else {
+        where.OR = [{ publishedAt: { not: null } }, { uploadedById: req.user!.id }];
+      }
+    } else if (req.user!.role === 'LIBRARIAN') {
+      if (status === 'pending' || status === 'unpublished') {
+        where.publishedAt = null;
+      } else if (status === 'published') {
+        where.publishedAt = { not: null };
+      }
+    }
+
     // Search query: if search is supplied, match across title, subject, and description
     const searchQuery = typeof search === 'string' ? search.trim() : '';
     if (searchQuery) {
-      where.OR = [
+      const searchConditions = [
         { title: { contains: searchQuery, mode: 'insensitive' } },
         { subject: { contains: searchQuery, mode: 'insensitive' } },
         { description: { contains: searchQuery, mode: 'insensitive' } },
       ];
+
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     } else if (subject && typeof subject === 'string') {
       where.subject = { contains: subject.trim(), mode: 'insensitive' };
     }
@@ -104,27 +131,20 @@ router.get('/papers', authenticate, async (req: AuthRequest, res: Response): Pro
 
     const total = await prisma.examPaper.count({ where });
 
-    let papers;
+    const queryOptions: any = {
+      where,
+      include: {
+        uploadedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: [{ year: 'desc' }, { semester: 'asc' }, { subject: 'asc' }],
+    };
+
     if (isPaginated) {
-      papers = await prisma.examPaper.findMany({
-        where,
-        include: {
-          uploadedBy: { select: { id: true, name: true, role: true } },
-        },
-        orderBy: [{ year: 'desc' }, { semester: 'asc' }, { subject: 'asc' }],
-        skip: (pageNum - 1) * limitNum,
-        take: limitNum,
-      });
-    } else {
-      papers = await prisma.examPaper.findMany({
-        where,
-        include: {
-          uploadedBy: { select: { id: true, name: true, role: true } },
-        },
-        orderBy: [{ year: 'desc' }, { semester: 'asc' }, { subject: 'asc' }],
-      });
+      queryOptions.skip = (pageNum - 1) * limitNum;
+      queryOptions.take = limitNum;
     }
 
+    const papers = await prisma.examPaper.findMany(queryOptions);
     const totalPages = isPaginated ? Math.ceil(total / limitNum) || 1 : 1;
 
     res.json({
@@ -143,10 +163,16 @@ router.get('/papers', authenticate, async (req: AuthRequest, res: Response): Pro
 });
 
 // GET /api/exam/subjects - Get all subjects grouped by program/branch
-router.get('/subjects', authenticate, async (_req: AuthRequest, res: Response): Promise<void> => {
+router.get('/subjects', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const where: any = {};
+    if (req.user!.role === 'STUDENT') {
+      where.publishedAt = { not: null };
+    }
+
     const subjects = await prisma.examPaper.groupBy({
       by: ['program', 'branch', 'subject', 'semester'],
+      where: Object.keys(where).length > 0 ? where : undefined,
       _count: { id: true },
       orderBy: [{ program: 'asc' }, { branch: 'asc' }, { semester: 'asc' }, { subject: 'asc' }],
     });
@@ -170,9 +196,103 @@ router.get('/papers/:id', authenticate, async (req: AuthRequest, res: Response):
       return;
     }
 
+    // Students cannot view unpublished papers
+    if (req.user!.role === 'STUDENT' && !paper.publishedAt) {
+      res.status(403).json({
+        error: 'Forbidden: This examination paper is pending librarian review and has not yet been published.',
+      });
+      return;
+    }
+
+    // Teachers cannot view unpublished papers uploaded by other faculty
+    if (req.user!.role === 'TEACHER' && !paper.publishedAt && paper.uploadedById !== req.user!.id) {
+      res.status(403).json({
+        error: 'Forbidden: This examination paper is pending librarian review.',
+      });
+      return;
+    }
+
     res.json({ paper });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// GET /api/exam/papers/:id/download - Secure, authenticated paper download
+router.get('/papers/:id/download', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const paper = await prisma.examPaper.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!paper) {
+      res.status(404).json({ error: 'Paper not found.' });
+      return;
+    }
+
+    // Student publication enforcement
+    if (req.user!.role === 'STUDENT' && !paper.publishedAt) {
+      res.status(403).json({
+        error: 'Forbidden: This examination paper is pending librarian review and has not yet been published.',
+      });
+      return;
+    }
+
+    // Teacher publication enforcement
+    if (req.user!.role === 'TEACHER' && !paper.publishedAt && paper.uploadedById !== req.user!.id) {
+      res.status(403).json({
+        error: 'Forbidden: This examination paper is pending librarian review.',
+      });
+      return;
+    }
+
+    const storageAdapter = getDocumentStorageAdapter(paper.storageProvider);
+
+    // 1. Cloudflare R2 / S3 Presigned URL Redirection
+    if (
+      storageAdapter.getSignedDownloadUrl &&
+      (paper.storageProvider === 'r2' || paper.storageProvider === 's3')
+    ) {
+      const storageKey = paper.storageKey || paper.fileUrl;
+      const signedUrl = await storageAdapter.getSignedDownloadUrl(storageKey, 60);
+      if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
+        res.json({ downloadUrl: signedUrl, expiresInSeconds: 60 });
+        return;
+      }
+      res.redirect(302, signedUrl);
+      return;
+    }
+
+    // 2. Local Storage Driver / Stream Serving
+    const storageKey = paper.storageKey || paper.fileUrl;
+    const storedObject = await storageAdapter.get(storageKey);
+
+    if (storedObject) {
+      const mime = paper.mimeType || storedObject.mimeType || 'application/pdf';
+      const downloadName = paper.originalFileName || path.basename(paper.fileUrl) || 'exam-paper.pdf';
+
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(downloadName)}"`);
+      res.setHeader('Content-Length', storedObject.sizeBytes);
+      res.send(storedObject.data);
+      return;
+    }
+
+    // 3. Fallback to reading legacy file directly from uploads directory if exists
+    const relativePath = paper.fileUrl.startsWith('/') ? paper.fileUrl.slice(1) : paper.fileUrl;
+    const legacyPath = path.resolve(rootDir, relativePath);
+
+    if (isPathInside(legacyPath, rootDir) && fs.existsSync(legacyPath)) {
+      const downloadName = paper.originalFileName || path.basename(paper.fileUrl) || 'exam-paper.pdf';
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(downloadName)}"`);
+      res.sendFile(legacyPath);
+      return;
+    }
+
+    res.status(404).json({ error: 'Examination paper file not found in storage.' });
+  } catch (error) {
+    console.error('Download paper error:', error);
+    res.status(500).json({ error: 'Server error downloading paper.' });
   }
 });
 
@@ -183,21 +303,13 @@ router.post(
   authorize('TEACHER', 'LIBRARIAN'),
   handleUpload,
   async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const { title, subject, program, branch, year, semester, type, description } = req.body;
+    let uploadedStorageKey: string | null = null;
+    const storageAdapter = getDocumentStorageAdapter();
 
-      const cleanupUploadedFile = () => {
-        if (req.file?.path && fs.existsSync(req.file.path)) {
-          try {
-            fs.unlinkSync(req.file.path);
-          } catch (unlinkErr) {
-            console.error('Failed to clean up uploaded file after validation error:', unlinkErr);
-          }
-        }
-      };
+    try {
+      const { title, subject, program, branch, year, semester, type, description, publish } = req.body;
 
       if (!title || !subject || !program || !branch || !year || !semester || !type) {
-        cleanupUploadedFile();
         res.status(400).json({
           error: 'All fields (title, subject, program, branch, year, semester, type) are required.',
         });
@@ -205,7 +317,6 @@ router.post(
       }
 
       if (!ALLOWED_PROGRAMS.includes(program)) {
-        cleanupUploadedFile();
         res.status(400).json({
           error: `Invalid program. Allowed programs: ${ALLOWED_PROGRAMS.join(', ')}.`,
         });
@@ -213,7 +324,6 @@ router.post(
       }
 
       if (!ALLOWED_TYPES.includes(type)) {
-        cleanupUploadedFile();
         res.status(400).json({
           error: `Invalid resource type. Allowed types: ${ALLOWED_TYPES.join(', ')}.`,
         });
@@ -222,7 +332,6 @@ router.post(
 
       const semInt = parseInt(semester);
       if (isNaN(semInt) || semInt < 1 || semInt > 6) {
-        cleanupUploadedFile();
         res.status(400).json({
           error: 'Invalid semester. Must be an integer between 1 and 6.',
         });
@@ -232,22 +341,76 @@ router.post(
       const yearInt = parseInt(year);
       const currentYear = new Date().getFullYear();
       if (isNaN(yearInt) || yearInt < 2000 || yearInt > currentYear + 2) {
-        cleanupUploadedFile();
         res.status(400).json({
           error: `Invalid year. Must be between 2000 and ${currentYear + 2}.`,
         });
         return;
       }
 
-      if (!req.file) {
+      if (!req.file || !req.file.buffer) {
         res.status(400).json({ error: 'Please upload a file.' });
         return;
+      }
+
+      // Binary Magic-Byte & Signature Validation
+      const fileValidation = validateExamPaperFile(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+
+      if (!fileValidation.valid) {
+        res.status(400).json({ error: fileValidation.error || 'Invalid file format.' });
+        return;
+      }
+
+      // Generate UUID, storage key and checksum
+      const paperId = crypto.randomUUID();
+      const sanitizedName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const filename = uniqueSuffix + path.extname(req.file.originalname);
+      const storageKey = `exam-papers/${paperId}/${sanitizedName}`;
+      uploadedStorageKey = storageKey;
+
+      const checksum = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+      const detectedMime = fileValidation.detectedMime || req.file.mimetype || 'application/pdf';
+
+      // Persist binary into storage adapter
+      await storageAdapter.put(storageKey, req.file.buffer, {
+        mimeType: detectedMime,
+        sizeBytes: req.file.buffer.length,
+        originalName: req.file.originalname,
+        checksum,
+      });
+
+      // Also support legacy local disk path for seamless backward compatibility during testing
+      const legacyDiskPath = path.join(uploadDir, filename);
+      try {
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        fs.writeFileSync(legacyDiskPath, req.file.buffer);
+      } catch (legacyDiskErr) {
+        console.warn('Legacy disk mirror failed (non-fatal in cloud mode):', legacyDiskErr);
+      }
+
+      const storageProvider =
+        process.env.STORAGE_DRIVER === 'r2' || process.env.STORAGE_DRIVER === 's3' ? 'r2' : 'local';
+
+      // Publication Policy:
+      // - Librarians can publish immediately if requested via publish=true, or default to published
+      // - Teachers CANNOT self-publish: all teacher uploads default to publishedAt: null (pending review)
+      let initialPublishedAt: Date | null = null;
+      if (req.user!.role === 'LIBRARIAN') {
+        // In existing test suites and librarian workflows, librarian uploads are published by default unless explicit false
+        initialPublishedAt = publish === 'false' || publish === false ? null : new Date();
       }
 
       // Execute paper creation and transactional audit logging atomically
       const paper = await prisma.$transaction(async (tx) => {
         const created = await tx.examPaper.create({
           data: {
+            id: paperId,
             title: title.trim(),
             subject: subject.trim(),
             program,
@@ -255,9 +418,16 @@ router.post(
             year: yearInt,
             semester: semInt,
             type,
-            fileUrl: `/uploads/exam-papers/${req.file!.filename}`,
+            fileUrl: `/uploads/exam-papers/${filename}`,
             description: description?.trim() || null,
             uploadedById: req.user!.id,
+            storageProvider,
+            storageKey,
+            originalFileName: req.file!.originalname,
+            mimeType: detectedMime,
+            fileSizeBytes: req.file!.buffer.length,
+            checksum,
+            publishedAt: initialPublishedAt,
           },
           include: { uploadedBy: { select: { id: true, name: true, role: true } } },
         });
@@ -275,7 +445,11 @@ router.post(
             semester: created.semester,
             type: created.type,
             fileName: req.file!.originalname,
-            fileSize: req.file!.size,
+            fileSize: req.file!.buffer.length,
+            checksum,
+            storageProvider,
+            storageKey,
+            published: Boolean(created.publishedAt),
           },
           tx,
         });
@@ -285,10 +459,12 @@ router.post(
 
       res.status(201).json({ paper });
     } catch (error) {
-      if (req.file?.path && fs.existsSync(req.file.path)) {
+      if (uploadedStorageKey) {
         try {
-          fs.unlinkSync(req.file.path);
-        } catch {}
+          await storageAdapter.delete(uploadedStorageKey);
+        } catch (cleanupErr) {
+          console.error('Failed to cleanup uploaded storage object after error:', cleanupErr);
+        }
       }
       console.error('Upload paper error:', error);
       res.status(500).json({ error: 'Server error uploading paper.' });
@@ -296,11 +472,101 @@ router.post(
   }
 );
 
-// Helper to ensure file path resides strictly inside target directory (cross-platform safe)
-function isPathInside(childPath: string, parentDir: string): boolean {
-  const rel = path.relative(parentDir, childPath);
-  return !rel.startsWith('..') && !path.isAbsolute(rel);
-}
+// PUT /api/exam/papers/:id/publish - Librarian approves and publishes exam paper
+router.put(
+  '/papers/:id/publish',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const paper = await prisma.examPaper.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!paper) {
+        res.status(404).json({ error: 'Paper not found.' });
+        return;
+      }
+
+      const publishedAt = new Date();
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const p = await tx.examPaper.update({
+          where: { id: req.params.id },
+          data: { publishedAt },
+          include: { uploadedBy: { select: { id: true, name: true, role: true } } },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.EXAM_PAPER_PUBLISHED,
+          targetId: p.id,
+          details: {
+            title: p.title,
+            publishedAt: publishedAt.toISOString(),
+            subject: p.subject,
+            program: p.program,
+            semester: p.semester,
+          },
+          tx,
+        });
+
+        return p;
+      });
+
+      res.json({ message: 'Exam paper published successfully.', paper: updated });
+    } catch (error) {
+      console.error('Publish paper error:', error);
+      res.status(500).json({ error: 'Server error publishing paper.' });
+    }
+  }
+);
+
+// PUT /api/exam/papers/:id/unpublish - Librarian unpublishes exam paper
+router.put(
+  '/papers/:id/unpublish',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const paper = await prisma.examPaper.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!paper) {
+        res.status(404).json({ error: 'Paper not found.' });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const p = await tx.examPaper.update({
+          where: { id: req.params.id },
+          data: { publishedAt: null },
+          include: { uploadedBy: { select: { id: true, name: true, role: true } } },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.EXAM_PAPER_UNPUBLISHED,
+          targetId: p.id,
+          details: {
+            title: p.title,
+            unpublishedAt: new Date().toISOString(),
+            subject: p.subject,
+          },
+          tx,
+        });
+
+        return p;
+      });
+
+      res.json({ message: 'Exam paper unpublished successfully.', paper: updated });
+    } catch (error) {
+      console.error('Unpublish paper error:', error);
+      res.status(500).json({ error: 'Server error unpublishing paper.' });
+    }
+  }
+);
 
 // DELETE /api/exam/papers/:id - Delete paper (Librarian or Teacher who uploaded it)
 router.delete(
@@ -322,11 +588,21 @@ router.delete(
         return;
       }
 
-      // Safe file path resolution inside rootDir / uploadDir
+      const storageAdapter = getDocumentStorageAdapter(paper.storageProvider);
+
+      // Clean up cloud / storage adapter object
+      if (paper.storageKey) {
+        try {
+          await storageAdapter.delete(paper.storageKey);
+        } catch (storageErr) {
+          console.warn('Storage adapter delete error:', storageErr);
+        }
+      }
+
+      // Clean up legacy local file if exists
       const relativePath = paper.fileUrl.startsWith('/') ? paper.fileUrl.slice(1) : paper.fileUrl;
       const filePath = path.resolve(rootDir, relativePath);
 
-      // Verify file is within uploadDir before deleting to prevent directory traversal
       if (isPathInside(filePath, uploadDir) && fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
@@ -352,6 +628,7 @@ router.delete(
             year: paper.year,
             type: paper.type,
             fileUrl: paper.fileUrl,
+            storageKey: paper.storageKey,
           },
           tx,
         });

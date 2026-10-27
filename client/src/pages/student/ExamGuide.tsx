@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import { ExamPaper, Program } from '../../types';
+import { downloadExamPaper } from '../../lib/downloadExamPaper';
 import {
   GraduationCap,
   FileText,
@@ -323,15 +324,15 @@ export const ExamGuide: React.FC = () => {
                 <span className="text-[10px] text-slate-400">
                   Verified by {paper.uploadedBy?.name || 'Faculty'}
                 </span>
-                <a
-                  href={paper.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-amber-500 text-white hover:text-slate-950 text-xs font-extrabold transition shadow-xs"
+                <button
+                  type="button"
+                  onClick={() => downloadExamPaper(paper)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-amber-500 text-white hover:text-slate-950 text-xs font-extrabold transition shadow-xs cursor-pointer"
+                  aria-label={`Download ${paper.title}`}
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download / View</span>
-                </a>
+                </button>
               </div>
             </div>
           ))

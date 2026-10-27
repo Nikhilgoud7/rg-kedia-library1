@@ -55,6 +55,13 @@ const uploadsDir = path.join(rootDir, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+// Restrict unauthenticated direct static access to sensitive examination papers (Phase 12C)
+app.use('/uploads/exam-papers', (_req, res) => {
+  res.status(403).json({
+    error: 'Direct static access to examination papers is forbidden. Please use authenticated download endpoints (/api/exam/papers/:id/download).',
+  });
+});
+
 app.use('/uploads', express.static(uploadsDir));
 app.use('/uploads', (_req, res) => {
   res.status(404).json({ error: 'File not found' });

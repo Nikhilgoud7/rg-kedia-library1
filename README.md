@@ -61,6 +61,7 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
 - **Frontend**: React 19, Vite, Tailwind CSS v4, Lucide Icons, React Router v7, React Hot Toast, Axios
 - **Backend**: Node.js, Express.js (ESM), TypeScript, Multer
 - **Database & ORM**: PostgreSQL (Neon Serverless), Prisma ORM with advisory transactions
+- **Storage Subsystem**: Cloudflare R2 object storage for past exam papers (AWS S3-compatible SDK, 60s presigned URLs) with local fallback; PostgreSQL bytea storage adapter for book covers
 - **Governance & Policy**: Strict zero-monetary-fine architecture with academic notifications and administrative audit logging
 - **Authentication**: JWT (JSON Web Tokens) with tokenVersion session revocation, bcryptjs password hashing
 
@@ -89,7 +90,12 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
    cd client && npm install && cd ..
    ```
 
-3. **Set up the Database & Seed Sample Data**:
+3. **Configure Environment Variables**:
+   Copy `.env.example` to `.env` and configure your settings:
+   - Development uses `STORAGE_DRIVER=local` by default.
+   - Production requires `STORAGE_DRIVER=r2` with Cloudflare R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`). Startup fails fast if production cloud storage is unconfigured or set to local disk.
+
+4. **Set up the Database & Seed Sample Data**:
    ```bash
    # Generate Prisma client and sync database schema
    npx prisma generate
@@ -99,7 +105,7 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
    npx tsx prisma/seed.ts
    ```
 
-4. **Start the Application**:
+5. **Start the Application**:
    ```bash
    npm run dev
    ```
