@@ -29,6 +29,7 @@
     "demo:purge": "tsx scripts/purgeDemoAccounts.ts",
     "storage:migrate": "tsx scripts/migrateExamStorage.ts",
     "admin:bootstrap": "tsx scripts/bootstrapAdmin.ts",
+    "roster:import": "tsx scripts/importStudentRoster.ts",
     "test": "node tests/runner.js --allow-tests",
     "test:auth": "node tests/runner.js --allow-tests --suite=auth",
     "test:authorization": "node tests/runner.js --allow-tests --suite=authorization",
@@ -72,6 +73,7 @@
     "test:audit-integration": "node tests/runner.js --allow-tests --suite=auditFinalIntegration",
     "test:audit-route": "node tests/runner.js --allow-tests --suite=auditRoute",
     "test:bootstrap": "node tests/runner.js --allow-tests --suite=librarianBootstrap",
+    "test:roster": "node tests/runner.js --allow-tests --suite=studentRosterImport",
     "test:audit-all": "node tests/runner.js --allow-tests --suite=auditFoundation,auditMonthlyQuarterly,auditPhysicalInventory,auditDiscrepancyManagement,auditAnnualInstitutional,auditFinalIntegration,auditRoute"
   },
   "dependencies": {
