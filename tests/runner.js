@@ -46,6 +46,7 @@ import { runAuditAnnualInstitutionalTests } from './suites/auditAnnualInstitutio
 import { runAuditFinalIntegrationTests } from './suites/auditFinalIntegration.test.js';
 import { runAuditRouteTests } from './suites/auditRouteIntegration.test.js';
 import { runCloudExamStorageTests } from './suites/cloudExamStorage.test.js';
+import { runLibrarianBootstrapTests } from './suites/librarianBootstrap.test.js';
 
 const SUITES = {
   auth: { name: 'Authentication Suite (Step 3)', fn: runAuthTests },
@@ -93,6 +94,7 @@ const SUITES = {
   auditFinalIntegration: { name: 'Audit Evidence Export & Final Integration Suite (Phase 11F)', fn: runAuditFinalIntegrationTests },
   auditRoute: { name: 'Audit Route & UI Integrity Suite (Phase 12B)', fn: runAuditRouteTests },
   cloudExamStorage: { name: 'Cloud Exam Storage & Driver Suite (Phase 12C)', fn: runCloudExamStorageTests },
+  librarianBootstrap: { name: 'Initial Librarian Bootstrap Suite (Task 1)', fn: runLibrarianBootstrapTests },
 };
 
 async function checkHealth(url) {
