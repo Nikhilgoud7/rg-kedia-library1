@@ -15,7 +15,7 @@ The application is deployed as a single-origin full-stack service with decoupled
   - React Router client-side SPA fallback for non-API routes.
 - **Database**: **Neon Serverless PostgreSQL** (`production` branch).
   - Pooled connection (`DATABASE_URL`) with PgBouncer for transactional queries and concurrency.
-  - Direct connection (`DIRECT_URL`) for Prisma schema migrations and DDL operations.
+  - Direct connection (`DATABASE_URL_UNPOOLED`) for Prisma schema migrations and DDL operations.
   - Automatic scale-to-zero when idle, sub-second cold starts.
 - **Security & Session Boundary**:
   - HttpOnly, `SameSite=Strict`, `Secure` JWT session cookies (`rg_kedia_session`).
@@ -36,27 +36,38 @@ services:
     runtime: node
     plan: free
     region: singapore # Closest to Hyderabad / India
-    buildCommand: npm run build
-    startCommand: npm run start
+    buildCommand: npm install --include=dev && npm --prefix client install --include=dev && npm run build
+    startCommand: npm start
     healthCheckPath: /api/health
-    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: DEMO_MODE
-        value: "true"
-      - key: COOKIE_SECURE
-        value: "true"
-      - key: COOKIE_SAME_SITE
-        value: "strict"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: STORAGE_DRIVER
+        value: r2
+      - key: R2_REGION
+        value: auto
+      - key: CLIENT_URL
+        sync: false
       - key: DATABASE_URL
         sync: false
-      - key: DIRECT_URL
+      - key: DATABASE_URL_UNPOOLED
         sync: false
       - key: JWT_SECRET
-        generateValue: true
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
 ```
 
 ---
@@ -67,15 +78,22 @@ services:
 | :--- | :---: | :--- | :--- |
 | `NODE_ENV` | Yes | `production` | Enables Express production optimizations and secure cookie requirements. |
 | `PORT` | Yes | `10000` (Render default) or `5000` | Port on which the HTTP server listens. |
-| `DATABASE_URL` | Yes | `postgresql://...@ep-...-pooler...neon.tech/neondb?sslmode=require` | Pooled connection string for application runtime queries. |
-| `DIRECT_URL` | Yes | `postgresql://...@ep-...neon.tech/neondb?sslmode=require` | Direct connection string for Prisma migrations. |
+| `DATABASE_URL` | Yes | `postgresql://...@ep-...-pooler...neon.tech/neondb?sslmode=require` | Pooled connection string for application runtime queries (via PgBouncer). |
+| `DATABASE_URL_UNPOOLED` | Yes | `postgresql://...@ep-...neon.tech/neondb?sslmode=require` | Direct unpooled connection string for Prisma DDL migrations. |
 | `JWT_SECRET` | Yes | Cryptographically random string ($\ge 32$ chars) | Signing key for authentication tokens. |
 | `JWT_EXPIRES_IN` | No | `7d` | Token expiration duration. |
+| `TRUST_PROXY` | Yes | `1` | Number of upstream reverse proxy hops (required on Render). |
+| `STORAGE_DRIVER` | Yes | `r2` | Cloud object storage provider. Fail-fast guard blocks startup if unset or `local`. |
+| `R2_ACCOUNT_ID` | Yes | Cloudflare Account ID hash | Cloudflare R2 account identifier. |
+| `R2_ACCESS_KEY_ID` | Yes | Cloudflare R2 API Access Key | Access credential for R2 storage bucket. |
+| `R2_SECRET_ACCESS_KEY` | Yes | Cloudflare R2 Secret Access Key | Secret credential for R2 storage bucket. |
+| `R2_BUCKET_NAME` | Yes | `rg-kedia-library-exam-papers` | Dedicated private object storage bucket name. |
+| `R2_REGION` | No | `auto` | Cloudflare R2 storage region. |
 | `COOKIE_SECURE` | Yes | `true` | Enforces `Secure` flag on session cookies (requires HTTPS). |
 | `COOKIE_SAME_SITE` | Yes | `strict` | Sets cookie `SameSite` attribute (`strict` or `lax`). |
 | `CORS_ORIGIN` | No | Single-origin default (omit or set to custom domain) | Trusted cross-origin origin if frontend is hosted separately. |
 | `RATE_LIMIT_MAX` | No | `10` | Max auth attempts per IP per 15-minute window. |
-| `DEMO_MODE` | No | `true` | Locks synthetic demo accounts and displays prototype disclaimer banner. |
+| `DEMO_MODE` | No | `false` | Locks synthetic demo accounts and displays disclaimer banner (set `false` for live college ops). |
 | `FORCE_SEED` | No | `false` (set `true` only during initial seed) | Production protection guard for `prisma/seed.ts`. |
 | `SEED_PASSWORD` | No | Defaults to `DemoPass@1234` | Default password for seeded demo personas ($\ge 12$ chars in prod). |
 
@@ -87,7 +105,7 @@ services:
 1. Log in to the [Neon Console](https://console.neon.tech).
 2. Create or select the `rg-kedia-library` project.
 3. Ensure the active database branch is `production`.
-4. Copy both the **Pooled connection string** (use for `DATABASE_URL`) and the **Direct connection string** (use for `DIRECT_URL`).
+4. Copy both the **Pooled connection string** (use for `DATABASE_URL`) and the **Direct connection string** (use for `DATABASE_URL_UNPOOLED`).
 
 ### Step 4.2: Web Service Setup (Render)
 1. Log in to [Render Dashboard](https://dashboard.render.com).
@@ -98,24 +116,30 @@ services:
    - **Region**: `Singapore` (or nearest region)
    - **Branch**: `main` (or `release`)
    - **Runtime**: `Node`
-   - **Build Command**: `npm run build`
+   - **Build Command**: `npm install --include=dev && npm --prefix client install --include=dev && npm run build`
    - **Start Command**: `npm run start`
    - **Instance Type**: `Free`
 5. Add the Environment Variables from Section 3 above into the Render environment tab.
 6. Click **Create Web Service**.
 
-### Step 4.3: Database Schema Migration & Seeding
-On Render, build commands execute `npm run prisma:generate` as part of `npm run build`.
-To apply migrations and seed synthetic personas:
-1. In the Render Shell or via local deployment CLI connected to Neon:
+### Step 4.3: Controlled Database Schema Migration & Librarian Bootstrap
+Schema migrations must **never** run automatically during ordinary application builds. This prevents uncontrolled schema alterations on unbacked-up databases.
+
+To apply migrations safely:
+1. **Pre-Migration Safety Check**: Verify database backup exists (via `npm run backup:create` or Neon branch snapshot) and verify target database connection.
+2. In the Render Shell or authorized administrative terminal connected to Neon:
    ```bash
-   npx prisma migrate deploy
+   DATABASE_URL_UNPOOLED="<your-neon-direct-unpooled-url>" npx prisma migrate deploy
    ```
-2. To seed demo personas in production for the first time:
+3. **Safe First-Time Chief Librarian Bootstrap**:
+   Do NOT run `prisma/seed.ts` in production. Instead, run the secure, non-destructive initial librarian bootstrap CLI:
    ```bash
-   FORCE_SEED=true SEED_PASSWORD="<YourSecurePassword12>" npx tsx prisma/seed.ts
+   INITIAL_LIBRARIAN_EMAIL="librarian@rgkedia.edu.in" \
+   INITIAL_LIBRARIAN_PASSWORD="<YourSecureTemporaryPassword12+>" \
+   INITIAL_LIBRARIAN_NAME="Chief Librarian" \
+   npm run admin:bootstrap -- --confirm
    ```
-3. Once seeded, unset `FORCE_SEED` in Render environment variables so the database is shielded from accidental resets.
+4. **First Login**: Log in as Chief Librarian and complete the mandatory password change.
 
 ---
 
@@ -179,11 +203,14 @@ To guarantee the database never exceeds Neon's 500 MB limit over a 3-year period
 - **Neon Sleep**: Neon suspends compute after 5 minutes of inactivity; waking up Neon takes $\le 1.5$ seconds and is handled transparently by the pooled connection.
 - **Best Practice for Demos/Presentations**: Visit the URL 2 minutes prior to a live presentation to warm up both Render and Neon caches.
 
-### 7.4 Ephemeral File Storage Policy
-- Render's free tier web service has an **ephemeral disk**. Files saved to `uploads/` (such as exam question papers) do not persist across redeployments or container restarts.
-- **Standard Protocol**:
-  - Sample study guides and exam papers are committed to source control or served as static references.
-  - If long-term permanent user file uploads are needed in future stages, configure an S3-compatible bucket (such as Cloudflare R2 or Neon Object Storage) using presigned URLs.
+### 7.4 Cloud Object Storage & File Durability Policy (Cloudflare R2)
+- Render's free tier web service has an **ephemeral disk**. Files saved to the local container disk do not persist across redeployments or container restarts.
+- **Production Architecture**:
+  - Examination papers and question banks are stored permanently in **Cloudflare R2** (`STORAGE_DRIVER=r2`).
+  - Cloudflare R2 provides 10 GB/month of free storage and **zero egress (bandwidth) charges**, ensuring perpetual free tier compliance.
+  - A production fail-fast guard (`server/config.ts`) strictly prevents the application from starting if `STORAGE_DRIVER` is unset or set to `local`/`disk` in production.
+  - The storage bucket is private; file downloads are served through authenticated 60-second presigned URLs (`/api/exam/papers/:id/download`).
+  - Book covers are stored transactionally in PostgreSQL as WebP byte arrays (`BookCover` table) via `DatabaseStorageDriver`, cached by client browsers with ETags.
 
 ### 7.5 Quarterly Maintenance Routine (5-Minute Checklist)
 Every 3 months, run this quick check:

@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install --include=dev && npm --prefix client install --include=dev && npm run build && npx prisma migrate deploy
+    buildCommand: npm install --include=dev && npm --prefix client install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -20,6 +20,10 @@ services:
         value: ./uploads
       - key: MAX_FILE_SIZE
         value: "10485760"
+      - key: STORAGE_DRIVER
+        value: r2
+      - key: R2_REGION
+        value: auto
       - key: CLIENT_URL
         sync: false
       - key: DATABASE_URL
@@ -27,4 +31,12 @@ services:
       - key: DATABASE_URL_UNPOOLED
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
         sync: false
