@@ -22,6 +22,9 @@ const __dirname = path.dirname(__filename);
 
 // Resolve project root directory safely across both development (server/) and production (dist/server/)
 function findProjectRoot(startDir: string): string {
+  if (process.env.VERCEL) {
+    return process.cwd();
+  }
   let current = startDir;
   while (current !== path.parse(current).root) {
     if (fs.existsSync(path.join(current, 'package.json'))) {
@@ -51,9 +54,13 @@ app.use(express.json({ limit: '6mb' }));
 app.use(express.urlencoded({ extended: true, limit: '6mb' }));
 
 // Serve uploaded files with JSON 404 fallback for missing files
-const uploadsDir = path.join(rootDir, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+const uploadsDir = process.env.VERCEL ? path.join('/tmp', 'uploads') : path.join(rootDir, 'uploads');
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch {
+  // Safe no-op on read-only serverless filesystems
 }
 // Restrict unauthenticated direct static access to sensitive examination papers (Phase 12C)
 app.use('/uploads/exam-papers', (_req, res) => {
@@ -69,6 +76,14 @@ app.use('/uploads', (_req, res) => {
 
 // Serve college assets
 app.use('/assets', express.static(path.join(rootDir, 'client', 'public')));
+
+// Normalize URL prefix for serverless environments (e.g. Vercel) if /api was stripped by rewrites
+app.use((req, _res, next) => {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/uploads') && !req.url.startsWith('/assets')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -125,15 +140,17 @@ if (IS_PRODUCTION || fs.existsSync(path.join(clientDist, 'index.html'))) {
   });
 }
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// Start server if not running in a serverless environment (e.g. Vercel)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`
   ╔══════════════════════════════════════════════════════╗
   ║  R.G. Kedia College of Commerce                     ║
   ║  Library Management System - API Server              ║
   ║  Running on http://localhost:${PORT}                    ║
   ╚══════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+}
 
 export default app;
