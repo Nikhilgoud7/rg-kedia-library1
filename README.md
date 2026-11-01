@@ -95,13 +95,41 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
    - Development uses `STORAGE_DRIVER=local` by default.
    - Production requires `STORAGE_DRIVER=r2` with Cloudflare R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`). Startup fails fast if production cloud storage is unconfigured or set to local disk.
 
-4. **Set up the Database & Seed Sample Data**:
+4. **Set up the Database Schema & Provision Initial Access**:
    ```bash
-   # Generate Prisma client and sync database schema
+   # Generate Prisma client and deploy versioned migrations safely
    npx prisma generate
-   npx prisma db push
+   npx prisma migrate deploy
+   ```
 
-   # Seed sample college books, users, and exam papers
+   **Production Access Provisioning (Recommended)**:
+   Do NOT run `prisma/seed.ts` in production. Instead, run the secure non-destructive initial librarian bootstrap CLI:
+   ```bash
+   INITIAL_LIBRARIAN_EMAIL="librarian@rgkedia.edu.in" \
+   INITIAL_LIBRARIAN_PASSWORD="YourSecurePassword12+" \
+   INITIAL_LIBRARIAN_NAME="Chief Librarian" \
+   npm run admin:bootstrap -- --confirm
+   ```
+
+   **Student Master Roster Import**:
+   To ingest real student enrollment rosters safely into the database:
+   ```bash
+   # Dry-run validation first:
+   npm run roster:import -- --file=path/to/roster.csv --dry-run
+   # Execute ingestion with confirmation:
+   npm run roster:import -- --file=path/to/roster.csv --execute --confirm
+   ```
+
+   **Exam Paper Storage Migration**:
+   To migrate exam papers between local storage and cloud object storage (Cloudflare R2 / Backblaze B2):
+   ```bash
+   npm run storage:migrate -- --dry-run
+   npm run storage:migrate -- --execute --confirm
+   ```
+
+   **Local Development / Synthetic Demo Seeding (Dev/Test Only)**:
+   > ⚠️ **Warning**: `prisma/seed.ts` is strictly for development and testing. It populates synthetic demo personas (`@demo.rgkedia.local`) and sample catalog titles. It is blocked by an automated fail-fast guard in production (`NODE_ENV=production`) unless `FORCE_SEED=true` and `SEED_PASSWORD >= 12` characters are explicitly set.
+   ```bash
    npx tsx prisma/seed.ts
    ```
 
@@ -115,9 +143,11 @@ An integrated, full-stack **Library Management System and Degree Exam Guide Port
 
 ---
 
-## 🔑 Default Demo Accounts
+## 🔑 Default Demo Accounts (Development / Demo Mode Only)
 
-The login page features 1-click test fill buttons:
+*(Synthetic accounts generated only in development and testing when seeded via `prisma/seed.ts` with `DEMO_MODE=true`. Production starts with zero demo accounts; initial administrative access is created via `npm run admin:bootstrap`.)*
+
+The login page features 1-click test fill buttons in demo environments:
 
 | Role | Username / Identifier | Password | Program / Branch |
 |---|---|---|---|

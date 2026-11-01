@@ -1,5 +1,5 @@
 // tests/suites/demoAndRetention.test.js — Phase 3G-4C Demo Safeguards, Polling Optimization & Retention Tests
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { createApiClient } from '../helpers/apiClient.js';
 import { TestDataManager } from '../helpers/testData.js';
 
@@ -314,6 +314,110 @@ export async function runDemoAndRetentionTests(baseUrl, assert) {
       checkRecentRead !== null,
       'Recent read notification (<90 days) was preserved in the database',
       `Found: ${Boolean(checkRecentRead)}`
+    );
+
+    // ---------------------------------------------------------
+    // 6. Production Seed Safety Guard (Phase 12D-2)
+    // ---------------------------------------------------------
+    // The seed script (prisma/seed.ts) contains a top-of-main fail-fast guard
+    // that terminates execution with exit code 1 before any PrismaClient instantiation
+    // or database queries (deleteMany) can run in production unless FORCE_SEED=true.
+
+    const invalidDbUrl = 'postgresql://invalid:invalid@127.0.0.1:1/none';
+
+    // Test 6A: In production without FORCE_SEED, seed script MUST exit code 1 with FATAL message
+    // and attempt ZERO database connections or deletions.
+    const unforcedSeedResult = spawnSync('npx', ['tsx', 'prisma/seed.ts'], {
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        FORCE_SEED: '',
+        DATABASE_URL: invalidDbUrl,
+        DATABASE_URL_UNPOOLED: invalidDbUrl,
+      },
+      encoding: 'utf-8',
+      shell: true,
+    });
+
+    const unforcedStderr = unforcedSeedResult.stderr || '';
+    const unforcedStdout = unforcedSeedResult.stdout || '';
+    const unforcedOutput = `${unforcedStdout}\n${unforcedStderr}`;
+
+    assert(
+      unforcedSeedResult.status === 1,
+      'Production seed without FORCE_SEED=true exits immediately with code 1',
+      `Got exit code ${unforcedSeedResult.status}`
+    );
+
+    assert(
+      unforcedOutput.includes('FATAL: Database seeding is blocked in production unless FORCE_SEED=true is explicitly set.'),
+      'Production seed outputs FATAL guard error message when FORCE_SEED is unset',
+      `Output: ${unforcedOutput}`
+    );
+
+    // Negative control verification:
+    // If the guard were positioned below deleteMany() (the pre-12D-2 regression bug),
+    // Prisma would have attempted a network connection to invalidDbUrl, producing Prisma
+    // P1001 database connection error output ("Can't reach database server").
+    // Because the guard is at the top of main() before new PrismaClient(), zero DB connection
+    // is attempted.
+    assert(
+      !unforcedOutput.includes('P1001') && !unforcedOutput.includes('Can\'t reach database server'),
+      'Production seed guard terminates before attempting database connection (zero DB queries/deletions)',
+      `Output contained DB connection error: ${unforcedOutput}`
+    );
+
+    // Test 6B: In production with FORCE_SEED=true, SEED_PASSWORD must be at least 12 characters
+    const shortPwdSeedResult = spawnSync('npx', ['tsx', 'prisma/seed.ts'], {
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        FORCE_SEED: 'true',
+        SEED_PASSWORD: 'short',
+        DATABASE_URL: invalidDbUrl,
+        DATABASE_URL_UNPOOLED: invalidDbUrl,
+      },
+      encoding: 'utf-8',
+      shell: true,
+    });
+
+    const shortPwdStderr = shortPwdSeedResult.stderr || '';
+    const shortPwdStdout = shortPwdSeedResult.stdout || '';
+    const shortPwdOutput = `${shortPwdStdout}\n${shortPwdStderr}`;
+
+    assert(
+      shortPwdSeedResult.status === 1,
+      'Production seed with short SEED_PASSWORD (<12 chars) exits with code 1 even if FORCE_SEED=true',
+      `Got exit code ${shortPwdSeedResult.status}`
+    );
+
+    assert(
+      shortPwdOutput.includes('FATAL: SEED_PASSWORD environment variable must be at least 12 characters in production.'),
+      'Production seed with short SEED_PASSWORD outputs FATAL password length error message',
+      `Output: ${shortPwdOutput}`
+    );
+
+    // Test 6C: Positive control — NODE_ENV=development is NOT blocked by production seed guard
+    const devSeedResult = spawnSync('npx', ['tsx', 'prisma/seed.ts'], {
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        FORCE_SEED: '',
+        DATABASE_URL: invalidDbUrl,
+        DATABASE_URL_UNPOOLED: invalidDbUrl,
+      },
+      encoding: 'utf-8',
+      shell: true,
+    });
+
+    const devStderr = devSeedResult.stderr || '';
+    const devStdout = devSeedResult.stdout || '';
+    const devOutput = `${devStdout}\n${devStderr}`;
+
+    assert(
+      !devOutput.includes('FATAL: Database seeding is blocked in production'),
+      'Positive control: Development environment (NODE_ENV=development) is not blocked by production seed guard',
+      `Development seed was blocked: ${devOutput}`
     );
 
   } finally {

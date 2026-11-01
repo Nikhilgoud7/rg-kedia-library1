@@ -1,21 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+let prisma: PrismaClient;
 
 async function main() {
-  console.log('Seeding R.G. Kedia College Library database...');
-
-  // Clean existing data
-  await prisma.notification.deleteMany();
-  await prisma.examPaper.deleteMany();
-  await prisma.bookRequest.deleteMany();
-  await prisma.lending.deleteMany();
-  await prisma.bookCopy.deleteMany();
-  await prisma.bookProgram.deleteMany();
-  await prisma.book.deleteMany();
-  await prisma.user.deleteMany();
-
   const isProduction = process.env.NODE_ENV === 'production';
   const forceSeed = process.env.FORCE_SEED === 'true';
 
@@ -29,6 +17,20 @@ async function main() {
     console.error('FATAL: SEED_PASSWORD environment variable must be at least 12 characters in production.');
     process.exit(1);
   }
+
+  console.log('Seeding R.G. Kedia College Library database...');
+
+  prisma = new PrismaClient();
+
+  // Clean existing data
+  await prisma.notification.deleteMany();
+  await prisma.examPaper.deleteMany();
+  await prisma.bookRequest.deleteMany();
+  await prisma.lending.deleteMany();
+  await prisma.bookCopy.deleteMany();
+  await prisma.bookProgram.deleteMany();
+  await prisma.book.deleteMany();
+  await prisma.user.deleteMany();
 
   const seedPassword = rawSeedPassword || 'DemoPass@1234';
   const adminPassword = process.env.ADMIN_PASSWORD || seedPassword;
@@ -706,5 +708,7 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    if (prisma) {
+      await prisma.$disconnect();
+    }
   });

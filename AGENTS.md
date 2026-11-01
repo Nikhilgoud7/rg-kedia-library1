@@ -4,21 +4,24 @@
 A full-stack library management system for R.G. Kedia College of Commerce with student, teacher, and librarian roles.
 
 ## Tech Stack
-- **Frontend**: React 18 + Vite (client/)
+- **Frontend**: React 19 + Vite (client/)
 - **Backend**: Express.js + TypeScript (server/)
-- **Database**: Prisma ORM with SQLite
-- **Auth**: JWT + bcryptjs
+- **Database**: Prisma ORM with PostgreSQL (Neon Serverless)
+- **Object Storage**: Cloudflare R2 / S3-compatible storage for exam papers; PostgreSQL bytea for book covers
+- **Auth**: JWT + bcryptjs with tokenVersion session revocation & mandatory first-login password change
 - **Styling**: Tailwind CSS utility classes
-- **UI**: Custom components (Modal, StatCard, BookCard, Navbar, NotificationBell)
+- **UI**: Custom components (Modal, StatCard, BookCard, Navbar, NotificationBell, AuditManagement)
 
 ## Directory Structure
 ```
 rg-kedia-library/
-  client/         # React Vite frontend
-  server/         # Express API server
-  prisma/         # Database schema & seeding
-  uploads/        # File uploads directory
-  package.json    # Root dependencies (tsx, concurrently, prisma)
+  client/         # React 19 Vite frontend
+  server/         # Express API server (TypeScript)
+  prisma/         # Database schema & migrations
+  scripts/        # Administrative CLI utilities (bootstrap, roster, storage migration)
+  tests/          # Automated regression test suites (47 suites)
+  uploads/        # Local disk fallback directory (dev/test only)
+  package.json    # Root dependencies and scripts
   AGENTS.md       # This file
 ```
 
@@ -27,16 +30,19 @@ rg-kedia-library/
 - `npm run dev:server` - Start Express server only
 - `npm run dev:client` - Start Vite client only
 - `npm run prisma:generate` - Generate Prisma client
-- `npm run prisma:push` - Push schema to database
-- `npm run prisma:seed` - Seed database with sample data
+- `npx prisma migrate deploy` - Deploy migrations safely using direct unpooled connection
+- `npm run admin:bootstrap` - Non-destructive first-time Chief Librarian account creation
+- `npm run roster:import` - Ingest student master roster CSV with dry-run and validation
+- `npm run storage:migrate` - Migrate exam papers between local and cloud object storage
+- `npm test` - Run automated regression suite against isolated test database
 
-## Authentication
+## Authentication & Session Security
 - Login: `POST /api/auth/login` with `{email, rollNumber, password}`
 - Register: `POST /api/auth/register` (LIBRARIAN only)
-- Token stored in `localStorage rg_kedia_token`
-- Axios interceptor auto-attaches `Authorization: Bearer <token>`
-- 401s clear token and redirect to `/login`
-- JWT expires in 7 days (`JWT_EXPIRES_IN` env var)
+- Session: HttpOnly `rg_kedia_session` cookie and `Authorization: Bearer <token>`
+- Token invalidation via `tokenVersion` counter on password change / logout
+- Mandatory first-login password change (`mustChangePassword: true`) blocks library operations until password updated
+- No default credentials in production: Chief Librarian created via `npm run admin:bootstrap`
 
 ## Role-Based Access Control
 - Roles: `STUDENT` | `TEACHER` | `LIBRARIAN`
@@ -44,35 +50,26 @@ rg-kedia-library/
 - Route protection: all API routes use `authenticate` middleware first
 
 ## API Route Patterns
-- `GET/POST /api/auth*` - Authentication
-- `GET/POST /api/books*` - Book catalog (librarian CRUD, student/teacher browse)
+- `GET/POST /api/auth*` - Authentication, session state, password change
+- `GET/POST /api/books*` - Book catalog & physical copies (librarian CRUD, student/teacher browse, cover images)
 - `GET/POST /api/lending*` - Lending/issue/return/my-books/my-requests (role-filtered)
-- `GET/POST /api/admin*` - Dashboard/users (LIBRARIAN only)
-- `GET/POST /api/exam*` - Exam papers
+- `GET/POST /api/admin*` - Admin dashboard, user management, audit trails (LIBRARIAN only)
+- `GET/POST /api/exam*` - Exam papers & study guides (role-filtered, presigned cloud downloads)
+- `GET /api/user/data-export` - Personal data export under DPDP compliance
+- `GET/POST /api/audits*` - Institutional audit lifecycle & physical inventory scans
 
-## Database/Prisma
-- Schema: `prisma/schema.prisma` - SQLite dialect
-- Run `npm run prisma:generate` + `npm run prisma:push` after schema changes
-- Seed data: `npm run prisma:seed` (creates default librarian/teachers/students/books)
-- Default logins from seed: librarian@rgkedia.edu.in / admin123, students with password123
+## Database & Migrations
+- Schema: `prisma/schema.prisma` - PostgreSQL dialect with advisory transactions
+- Schema updates applied via versioned Prisma migrations (`npx prisma migrate deploy` using `DATABASE_URL_UNPOOLED`)
+- `prisma/seed.ts` is strictly for dev/test environments with synthetic personas (`@demo.rgkedia.local`); blocked in production unless `FORCE_SEED=true` with `SEED_PASSWORD >= 12` chars
+- Production initial access configured via `npm run admin:bootstrap`
 
 ## User Roles & Permissions
-- **LIBRARIAN**: Full access - books CRUD, users CRUD, lending approval/returns, dashboard
-- **TEACHER**: Borrow requests, return requests to students, browse books, upload exam papers, view student checkouts
-- **STUDENT**: Borrow requests, view own borrowings, browse catalog, exam papers by program/semester
+- **LIBRARIAN**: Full access - catalog CRUD, physical copy barcodes, user management, lending queue approval/returns, institutional audits, analytics
+- **TEACHER**: Browse catalog, view student checkouts by copy, request student returns, upload unpublished exam papers
+- **STUDENT**: Browse catalog, submit borrow requests, view active loans and return countdowns, download published exam papers
 
-## Frontend Notes
-- Auth context: `client/src/context/AuthContext.tsx` - manages user/token state
-- API: `client/src/lib/api.ts` - Axios with JWT token auto-attachment
-- Role badges in Navbar map role → display text/colors
-- NotificationBell polls `/lending/notifications` every 30s
-- Three page groups: `student/`, `teacher/`, `librarian/`
-- Modals use `client/src/components/common/Modal.tsx`
-
-## Known States (from inspection)
-- System is functional with core lending/return flow working
-- Role gates implemented via `authorize()` middleware
-- Overdue fines calculated at ₹2/day
-- Book copies tracked with status (AVAILABLE/ISSUED/RESERVED/LOST/DAMAGED)
-- Program/branch mapping via `BookProgram` relation
-- Exam papers downloadable but upload UI limited
+## Governance & Policy
+- **Zero-monetary-fine policy**: No monetary fines are assessed for overdue books; academic notifications and reminders are used instead
+- **Cloud storage integrity**: Exam papers stored in Cloudflare R2 / S3-compatible private bucket; served via 60-second presigned URLs
+- **Physical copy tracking**: Individual copies tracked with status (`AVAILABLE`, `ISSUED`, `RESERVED`, `LOST`, `DAMAGED`) and unique barcodes

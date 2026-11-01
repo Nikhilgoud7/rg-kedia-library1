@@ -48,10 +48,16 @@ services:
         value: "1"
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: MAX_FILE_SIZE
+        value: "10485760"
       - key: STORAGE_DRIVER
         value: r2
       - key: R2_REGION
         value: auto
+      - key: DEMO_MODE
+        value: "false"
       - key: CLIENT_URL
         sync: false
       - key: DATABASE_URL
@@ -78,21 +84,21 @@ services:
 | :--- | :---: | :--- | :--- |
 | `NODE_ENV` | Yes | `production` | Enables Express production optimizations and secure cookie requirements. |
 | `PORT` | Yes | `10000` (Render default) or `5000` | Port on which the HTTP server listens. |
+| `CLIENT_URL` | No | `http://localhost:5173` | Client origin for CORS in decoupled setups; omitted or unused in single-origin Render deployment. |
 | `DATABASE_URL` | Yes | `postgresql://...@ep-...-pooler...neon.tech/neondb?sslmode=require` | Pooled connection string for application runtime queries (via PgBouncer). |
 | `DATABASE_URL_UNPOOLED` | Yes | `postgresql://...@ep-...neon.tech/neondb?sslmode=require` | Direct unpooled connection string for Prisma DDL migrations. |
 | `JWT_SECRET` | Yes | Cryptographically random string ($\ge 32$ chars) | Signing key for authentication tokens. |
 | `JWT_EXPIRES_IN` | No | `7d` | Token expiration duration. |
 | `TRUST_PROXY` | Yes | `1` | Number of upstream reverse proxy hops (required on Render). |
+| `UPLOAD_DIR` | No | `./uploads` | Local filesystem directory for file staging / dev uploads. |
+| `MAX_FILE_SIZE` | No | `10485760` (10 MB) | Maximum permitted file upload size in bytes. |
 | `STORAGE_DRIVER` | Yes | `r2` | Cloud object storage provider. Fail-fast guard blocks startup if unset or `local`. |
-| `R2_ACCOUNT_ID` | Yes | Cloudflare Account ID hash | Cloudflare R2 account identifier. |
-| `R2_ACCESS_KEY_ID` | Yes | Cloudflare R2 API Access Key | Access credential for R2 storage bucket. |
-| `R2_SECRET_ACCESS_KEY` | Yes | Cloudflare R2 Secret Access Key | Secret credential for R2 storage bucket. |
-| `R2_BUCKET_NAME` | Yes | `rg-kedia-library-exam-papers` | Dedicated private object storage bucket name. |
-| `R2_REGION` | No | `auto` | Cloudflare R2 storage region. |
-| `COOKIE_SECURE` | Yes | `true` | Enforces `Secure` flag on session cookies (requires HTTPS). |
-| `COOKIE_SAME_SITE` | Yes | `strict` | Sets cookie `SameSite` attribute (`strict` or `lax`). |
-| `CORS_ORIGIN` | No | Single-origin default (omit or set to custom domain) | Trusted cross-origin origin if frontend is hosted separately. |
-| `RATE_LIMIT_MAX` | No | `10` | Max auth attempts per IP per 15-minute window. |
+| `R2_ACCOUNT_ID` | Yes | Cloudflare Account ID hash | Cloudflare R2 account identifier. Required unless `R2_ENDPOINT` is specified. |
+| `R2_ACCESS_KEY_ID` | Yes | Cloudflare R2 / S3 API Access Key | Access credential for object storage bucket (fallback: `S3_ACCESS_KEY_ID`). |
+| `R2_SECRET_ACCESS_KEY` | Yes | Cloudflare R2 / S3 Secret Access Key | Secret credential for object storage bucket (fallback: `S3_SECRET_ACCESS_KEY`). |
+| `R2_BUCKET_NAME` | Yes | `rg-kedia-library-exam-papers` | Dedicated private object storage bucket name (fallback: `S3_BUCKET`). |
+| `R2_ENDPOINT` | No | Custom S3/B2 endpoint URL | Optional custom S3-compatible endpoint (defaults to `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`; fallback: `S3_ENDPOINT`). |
+| `R2_REGION` | No | `auto` | Cloudflare R2 / S3 storage region (defaults to `auto`; fallback: `S3_REGION`). |
 | `DEMO_MODE` | No | `false` | Locks synthetic demo accounts and displays disclaimer banner (set `false` for live college ops). |
 | `FORCE_SEED` | No | `false` (set `true` only during initial seed) | Production protection guard for `prisma/seed.ts`. |
 | `SEED_PASSWORD` | No | Defaults to `DemoPass@1234` | Default password for seeded demo personas ($\ge 12$ chars in prod). |

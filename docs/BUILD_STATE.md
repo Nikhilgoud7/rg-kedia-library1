@@ -1,12 +1,30 @@
 # RG-Kedia Library Management System — Build State
 
 ## Baseline Commit
-- **Committed Milestone Baseline (Phase 12B Complete & Synchronized)**: `cb96698a681b84cb4125841564c590357e3c60b5` (`cb96698`)
-- **Previous Milestone Baseline (Phase 11 Complete)**: `fed6ce911ca29bbe582ab49eb198245093864de3` (`fed6ce9`)
+- **Committed Milestone Baseline (Phase 12D Baseline — Deployment Decoupled, Unpooled DB URL, Client Build Fix)**: `5bec992ebe3f4552f0fe0b844505af59f7e399f9` (`5bec992`)
+- **Previous Milestone Baselines**:
+  - Student Master Roster Ingestion Engine (Task 2): `4ab16f8`
+  - Chief Librarian Production Bootstrap (Task 1): `72a0daa`
+  - Phase 12C Complete (Cloud Exam Paper Storage): `cb96698a681b84cb4125841564c590357e3c60b5` (`cb96698`)
+  - Phase 11 Complete (Institutional Audit System): `fed6ce911ca29bbe582ab49eb198245093864de3` (`fed6ce9`)
 - **Current Milestone**: Phase 12 — System Readiness, Hardening & Pilot Rollout
-- **Current Sub-Phase**: Phase 12C Complete (Cloud Exam Paper Storage Implementation: 2,314 Total Regression Assertions Across 45 Suites)
+- **Current Sub-Phase**: Phase 12D-2 Complete (Seed Safety Hardening & Documentation Reconciliation: 2,512 Total Regression Assertions Across 47 Suites)
 
 ## Completed Sub-Phases
+- **Phase 12D-2**: Seed Safety Hardening & Documentation Reconciliation (`demoAndRetention.test.js` expanded to 23 assertions).
+  - Hardened `prisma/seed.ts` fail-fast guard to execute as the very first statement of `main()` prior to any PrismaClient instantiation or database interaction, ensuring zero database mutations or connection attempts in production when `FORCE_SEED` is unset.
+  - Retained strict requirement for `SEED_PASSWORD >= 12` characters when `FORCE_SEED=true` in production.
+  - Updated `render.yaml` and `.env.example` to explicitly declare `DEMO_MODE=false`.
+  - Reconciled documentation across `AGENTS.md`, `PROJECT_TRANSFER_GUIDE.md`, `README.md`, `DEPLOY.md`, and `docs/BUILD_STATE.md` to reflect React 19, PostgreSQL on Neon, versioned Prisma migrations, cloud object storage, and zero-monetary-fine academic governance while eliminating obsolete SQLite/Replit references and unread environment variables.
+  - Added child process test assertions in `tests/suites/demoAndRetention.test.js` verifying exit code 1, fatal error messaging, zero DB connection attempts, short password rejection, and development positive control.
+- **Phase 12D-1**: Go-Live Readiness Audit
+  - Comprehensive read-only audit of production readiness: verified git baseline `5bec992`, clean working tree, 8/8 applied Prisma migrations, automated test coverage (47 suites, 2,506 assertions), zero leaked credentials or connection strings, and zero mutations against production branch.
+- **Task 3A**: Deployment Architecture Decoupling & Unpooled Migration Alignment (`5bec992`)
+  - Aligned unpooled database URL (`DATABASE_URL_UNPOOLED`) for direct DDL migrations, decoupled migration deployment from container startup, resolved client production build script.
+- **Task 2**: Student Master Roster Ingestion Engine (`roster:import`, `4ab16f8`)
+  - Implemented high-throughput student roster ingestion CLI (`scripts/importStudentRoster.ts`) supporting RFC 4180 CSV, dry-run simulation, cross-field validation, duplicate conflict attribution, and transactional chunking.
+- **Task 1**: Chief Librarian First-Time Production Bootstrap (`admin:bootstrap`, `72a0daa`)
+  - Implemented non-destructive initial Chief Librarian bootstrap CLI (`scripts/bootstrapAdmin.ts`) for clean production initial access with enforced password complexity and `mustChangePassword` flag.
 - **Phase 12C**: Cloud Exam Paper Storage Implementation (`cloudExamStorage.test.js` — 37 assertions, `examGuide.test.js` expanded to 70 assertions).
   - Transitioned examination paper storage from local filesystem (`uploads/exam-papers/`) to Cloudflare R2 S3-compatible cloud object storage using `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
   - Maintained provider-independent storage architecture with local filesystem (`LocalStorageDriver`) and database fallback adapters for development and offline testing.
@@ -255,8 +273,8 @@
 - **Verification Status**: 2,314 / 2,314 regression test assertions passing across 45 suites on dedicated Neon test branch; backend TypeScript clean (0 errors); client TypeScript clean (0 errors); frontend client build clean (0 errors); Prisma validation clean; git diff check clean.
 
 ## Metrics Summary
-- **Total Test Suites**: 45
-- **Total Test Assertions**: 2,295 (2,295 Passed, 0 Failed, 0 Skipped: 2,242 Phase 12B baseline + 16 exam guide expansion assertions + 37 Phase 12C cloud exam storage assertions)
+- **Total Test Suites**: 47
+- **Total Test Assertions**: 2,512 (2,512 Passed, 0 Failed, 0 Skipped: 2,506 baseline assertions + 6 Phase 12D-2 seed guard assertions)
 - **Cloud Exam Paper Storage Subsystem**: Cloudflare R2 S3-compatible driver, binary signature validator (magic bytes for PDF/PNG/JPEG/DOC/DOCX and `MZ` executable rejection), private bucket isolation, 60s presigned authenticated downloads (`/api/exam/papers/:id/download`), librarian-controlled publication workflow (`publishedAt`), CLI migration & rollback engine with SHA-256 integrity checks, static `/uploads/exam-papers` filesystem path blocked with HTTP 403, production fail-fast environment validation guard (enforces mandatory explicit cloud driver and Cloudflare R2 credentials while strictly forbidding local disk storage in production; zero secret leakage)
 - **Institutional Audit Management**: 5 audit models, lifecycle state machines, physical barcode scanning with hardware support, discrepancy & corrective action resolution, Osmania University academic year reporting (June 1 – May 31), audit evidence retention guards (`onDelete: Restrict`)
 - **Routing & Client Integrity**: Registered `/librarian/audits` route guarded for `LIBRARIAN`, matching sidebar link in `Sidebar.tsx`, zero redirection loop
