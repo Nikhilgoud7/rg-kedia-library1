@@ -36,6 +36,7 @@ export interface MigrationExecutionResult {
   completedAt: string;
   totalCandidates: number;
   migratedSuccessfully: number;
+  simulatedCandidates?: number;
   skipped: number;
   failed: number;
   targetProvider: string;
@@ -44,7 +45,7 @@ export interface MigrationExecutionResult {
     title: string;
     storageKey: string;
     checksum: string;
-    status: 'SUCCESS' | 'SKIPPED' | 'FAILED';
+    status: 'SUCCESS' | 'SKIPPED' | 'FAILED' | 'SIMULATED';
     error?: string;
   }>;
 }
@@ -171,6 +172,7 @@ export async function executeExamStorageMigration(options: {
   const details: MigrationExecutionResult['details'] = [];
 
   let migratedCount = 0;
+  let simulatedCount = 0;
   let skippedCount = scanReport.alreadyMigrated + scanReport.missingPhysicalFiles;
   let failedCount = 0;
 
@@ -189,9 +191,9 @@ export async function executeExamStorageMigration(options: {
         title: candidate.title,
         storageKey,
         checksum: candidate.checksum,
-        status: 'SUCCESS',
+        status: 'SIMULATED',
       });
-      migratedCount++;
+      simulatedCount++;
       continue;
     }
 
@@ -210,10 +212,27 @@ export async function executeExamStorageMigration(options: {
         checksum: computedChecksum,
       });
 
-      // 2. Verify existence and integrity
+      // 2. Verify existence and remote integrity against source
       const exists = await adapter.exists(storageKey);
       if (!exists) {
         throw new Error(`INTEGRITY_CHECK_FAILED: Cloud object '${storageKey}' does not exist after upload.`);
+      }
+
+      if (adapter.getMetadata) {
+        const remoteMeta = await adapter.getMetadata(storageKey);
+        if (!remoteMeta) {
+          throw new Error(`INTEGRITY_CHECK_FAILED: Could not retrieve metadata for cloud object '${storageKey}'.`);
+        }
+        if (remoteMeta.sizeBytes !== buffer.length) {
+          throw new Error(
+            `INTEGRITY_CHECK_FAILED: Size mismatch for '${storageKey}'. Local: ${buffer.length} bytes, Remote: ${remoteMeta.sizeBytes} bytes.`
+          );
+        }
+        if (remoteMeta.checksum && remoteMeta.checksum.toLowerCase() !== computedChecksum.toLowerCase()) {
+          throw new Error(
+            `INTEGRITY_CHECK_FAILED: Checksum mismatch for '${storageKey}'. Local: ${computedChecksum}, Remote: ${remoteMeta.checksum}.`
+          );
+        }
       }
 
       // 3. Atomically update database metadata
@@ -254,6 +273,7 @@ export async function executeExamStorageMigration(options: {
     completedAt: new Date().toISOString(),
     totalCandidates: candidates.length,
     migratedSuccessfully: migratedCount,
+    simulatedCandidates: dryRun ? simulatedCount : 0,
     skipped: skippedCount,
     failed: failedCount,
     targetProvider,

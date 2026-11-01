@@ -9,10 +9,18 @@ import {
 } from '../../dist/server/lib/storage/fileSignatureValidator.js';
 import { LocalStorageDriver } from '../../dist/server/lib/storage/LocalStorageDriver.js';
 import { S3StorageDriver } from '../../dist/server/lib/storage/S3StorageDriver.js';
-import { getDocumentStorageAdapter, resetDocumentStorageAdapter } from '../../dist/server/lib/storage/index.js';
+import {
+  getDocumentStorageAdapter,
+  resetDocumentStorageAdapter,
+  normalizeDocumentStorageProvider,
+} from '../../dist/server/lib/storage/index.js';
 import { validateStorageEnvironment, resolveR2ConfigFromEnv } from '../../dist/server/lib/storage/storageEnvValidator.js';
-import { scanExamStorageInventory } from '../../dist/server/lib/storage/examMigrationEngine.js';
+import {
+  scanExamStorageInventory,
+  executeExamStorageMigration,
+} from '../../dist/server/lib/storage/examMigrationEngine.js';
 import { TestDataManager } from '../helpers/testData.js';
+import examRouter from '../../dist/server/routes/exam.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -320,8 +328,300 @@ export async function runCloudExamStorageTests(_baseUrl, assert) {
       resetDocumentStorageAdapter();
     }
 
+    // -------------------------------------------------------------------------
+    // 7. Phase 13 Storage Audit Corrections: Safety, Normalization & Integrity
+    // -------------------------------------------------------------------------
+
+    // A. Document Storage Safety: Reject 'database' in both dev and production
+    let devDbThrew = false;
+    try {
+      getDocumentStorageAdapter('database');
+    } catch (err) {
+      devDbThrew = err.message.includes("Document storage does not support 'database'");
+    }
+    assert(devDbThrew, "getDocumentStorageAdapter('database') throws explicit rejection");
+
+    // Production prohibition on local document storage cannot be bypassed
+    const prevEnv = process.env.NODE_ENV;
+    const prevDriver = process.env.STORAGE_DRIVER;
+    try {
+      process.env.NODE_ENV = 'production';
+      process.env.STORAGE_DRIVER = 'r2';
+      resetDocumentStorageAdapter();
+
+      // Attempting to pass explicit driver='local' in production must throw
+      let explicitLocalThrew = false;
+      try {
+        getDocumentStorageAdapter('local');
+      } catch (err) {
+        explicitLocalThrew = err.message.includes('strictly forbidden in production');
+      }
+      assert(explicitLocalThrew, "Explicit argument 'local' cannot bypass production document storage prohibition");
+
+      // Attempting to pass explicit driver='disk' in production must throw
+      let explicitDiskThrew = false;
+      try {
+        getDocumentStorageAdapter('disk');
+      } catch (err) {
+        explicitDiskThrew = err.message.includes('strictly forbidden in production');
+      }
+      assert(explicitDiskThrew, "Explicit argument 'disk' cannot bypass production document storage prohibition");
+
+      // Attempting to pass explicit driver='database' in production must throw
+      let explicitDbThrew = false;
+      try {
+        getDocumentStorageAdapter('database');
+      } catch (err) {
+        explicitDbThrew = err.message.includes('strictly forbidden in production');
+      }
+      assert(explicitDbThrew, "Explicit argument 'database' cannot bypass production document storage prohibition");
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      if (prevDriver !== undefined) {
+        process.env.STORAGE_DRIVER = prevDriver;
+      } else {
+        delete process.env.STORAGE_DRIVER;
+      }
+      resetDocumentStorageAdapter();
+    }
+
+    // B. Storage Provider Normalization
+    assert(normalizeDocumentStorageProvider('r2') === 'r2', "normalizeDocumentStorageProvider('r2') returns 'r2'");
+    assert(normalizeDocumentStorageProvider('s3') === 'r2', "normalizeDocumentStorageProvider('s3') normalizes to 'r2'");
+    assert(normalizeDocumentStorageProvider('cloudflare') === 'r2', "normalizeDocumentStorageProvider('cloudflare') normalizes to 'r2'");
+    assert(normalizeDocumentStorageProvider('CLOUDFLARE ') === 'r2', "normalizeDocumentStorageProvider trims and lowercases");
+    assert(normalizeDocumentStorageProvider('local') === 'local', "normalizeDocumentStorageProvider('local') returns 'local'");
+    assert(normalizeDocumentStorageProvider('disk') === 'local', "normalizeDocumentStorageProvider('disk') normalizes to 'local'");
+
+    let invalidAliasThrew = false;
+    try {
+      normalizeDocumentStorageProvider('database');
+    } catch (err) {
+      invalidAliasThrew = err.message.includes('INVALID_STORAGE_PROVIDER');
+    }
+    assert(invalidAliasThrew, "normalizeDocumentStorageProvider rejects 'database'");
+
+    let unknownAliasThrew = false;
+    try {
+      normalizeDocumentStorageProvider('azure');
+    } catch (err) {
+      unknownAliasThrew = err.message.includes('INVALID_STORAGE_PROVIDER');
+    }
+    assert(unknownAliasThrew, "normalizeDocumentStorageProvider rejects unknown provider 'azure'");
+
+    // C. Migration Dry-Run Accuracy: Zero persistent changes & simulated status
+    const librarianUser = await dataManager.createUser({ role: 'LIBRARIAN', tag: 'mig_dry' });
+    const dummyPaperContent = Buffer.from('%PDF-1.4 Synthetic exam paper for migration test %%EOF');
+    const dummyChecksum = crypto.createHash('sha256').update(dummyPaperContent).digest('hex');
+    const dummyFileName = `test-paper-${Date.now()}.pdf`;
+    const dummyDiskPath = path.join(tempTestDir, dummyFileName);
+    fs.writeFileSync(dummyDiskPath, dummyPaperContent);
+
+    const dryTestPaper = await prisma.examPaper.create({
+      data: {
+        title: 'Dry Run Test Paper',
+        subject: 'Accounting',
+        program: 'BCOM',
+        branch: 'General',
+        year: 2024,
+        semester: 1,
+        type: 'PREVIOUS_YEAR',
+        fileUrl: `/uploads/exam-papers/${dummyFileName}`,
+        uploadedById: librarianUser.id,
+        storageProvider: 'local',
+        checksum: dummyChecksum,
+        fileSizeBytes: dummyPaperContent.length,
+        originalFileName: dummyFileName,
+        mimeType: 'application/pdf',
+        publishedAt: new Date(),
+      },
+    });
+
+    const dryRunResult = await executeExamStorageMigration({
+      dryRun: true,
+      customUploadDir: tempTestDir,
+    });
+    assert(dryRunResult.dryRun === true, 'Migration execution result indicates dryRun: true');
+    assert(dryRunResult.migratedSuccessfully === 0, 'Dry run reports 0 files actually migrated (migratedSuccessfully: 0)');
+    assert(
+      (dryRunResult.simulatedCandidates ?? 0) >= 1,
+      'Dry run distinguishes simulated candidates from actual migrations'
+    );
+    const dryRunCandidate = dryRunResult.details.find((d) => d.paperId === dryTestPaper.id);
+    assert(dryRunCandidate !== undefined, 'Test paper was evaluated as candidate in dry run');
+    assert(dryRunCandidate?.status === 'SIMULATED', "Dry run candidate status is marked 'SIMULATED' (not SUCCESS)");
+
+    // Verify DB record remained untouched
+    const paperAfterDryRun = await prisma.examPaper.findUnique({ where: { id: dryTestPaper.id } });
+    assert(paperAfterDryRun?.storageProvider === 'local', 'Database record storageProvider remains unchanged after dry-run');
+
+    // D. Migration Remote Integrity Verification: Checksum/size verification prevents corruption
+    const mockCorruptAdapter = {
+      async put(key, buffer, metadata) {
+        return { key, sizeBytes: buffer.length, mimeType: metadata.mimeType };
+      },
+      async exists(key) {
+        return true;
+      },
+      async getMetadata(key) {
+        return {
+          mimeType: 'application/pdf',
+          sizeBytes: dummyPaperContent.length,
+          checksum: 'corrupted_remote_checksum_mismatch',
+        };
+      },
+      async get(key) { return null; },
+      async delete(key) {},
+    };
+
+    const corruptMigrationResult = await executeExamStorageMigration({
+      dryRun: false,
+      storageAdapter: mockCorruptAdapter,
+      customUploadDir: tempTestDir,
+    });
+    const corruptDetail = corruptMigrationResult.details.find((d) => d.paperId === dryTestPaper.id);
+    assert(corruptDetail?.status === 'FAILED', 'Migration marked FAILED when remote checksum verification fails');
+    assert(
+      corruptDetail?.error?.includes('INTEGRITY_CHECK_FAILED'),
+      'Failure error message explicitly identifies INTEGRITY_CHECK_FAILED'
+    );
+    assert(fs.existsSync(dummyDiskPath), 'Local source file is preserved intact even when migration fails');
+
+    const paperAfterFailedVerification = await prisma.examPaper.findUnique({ where: { id: dryTestPaper.id } });
+    assert(
+      paperAfterFailedVerification?.storageProvider === 'local',
+      'Database record storageProvider was NOT updated on failed remote integrity check'
+    );
+
+    // E. Legacy Paper Download Guard & Publication Gates in Production
+    const downloadRouteLayer = examRouter.stack.find((s) => s.route && s.route.path === '/papers/:id/download');
+    const downloadHandler = downloadRouteLayer.route.stack[1].handle;
+
+    const prevNodeEnvForDownload = process.env.NODE_ENV;
+    const prevAllowLegacy = process.env.ALLOW_LEGACY_LOCAL_SERVE;
+
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.ALLOW_LEGACY_LOCAL_SERVE;
+      delete process.env.ALLOW_LEGACY_LOCAL_STORAGE;
+
+      let statusCode = 200;
+      let jsonPayload = null;
+      const mockRes = {
+        status(code) {
+          statusCode = code;
+          return this;
+        },
+        json(body) {
+          jsonPayload = body;
+          return this;
+        },
+        setHeader() {},
+        send() {},
+        sendFile() {},
+        redirect() {},
+      };
+
+      const mockReq = {
+        params: { id: dryTestPaper.id },
+        user: { id: librarianUser.id, role: 'LIBRARIAN' },
+        query: {},
+        headers: {},
+      };
+
+      await downloadHandler(mockReq, mockRes);
+      assert(
+        statusCode === 409,
+        `Production download of legacy local paper without override returns HTTP 409 (received: ${statusCode})`
+      );
+      assert(
+        jsonPayload?.error === 'LEGACY_STORAGE_UNMIGRATED',
+        "Production download error explicitly identifies 'LEGACY_STORAGE_UNMIGRATED'"
+      );
+
+      // When ALLOW_LEGACY_LOCAL_SERVE=true, production allows serving legacy papers
+      process.env.ALLOW_LEGACY_LOCAL_SERVE = 'true';
+      let allowedStatusCode = 200;
+      const mockAllowedRes = {
+        status(code) {
+          allowedStatusCode = code;
+          return this;
+        },
+        json() { return this; },
+        setHeader() {},
+        send() {},
+        sendFile() {},
+        redirect() {},
+      };
+
+      await downloadHandler(mockReq, mockAllowedRes);
+      assert(
+        allowedStatusCode !== 409,
+        'With ALLOW_LEGACY_LOCAL_SERVE=true, the legacy production 409 guard is bypassed'
+      );
+
+      // Student publication gate enforcement (never bypassed)
+      const studentUser = await dataManager.createUser({ role: 'STUDENT', tag: 'gate_std' });
+      const unpublishedPaper = await prisma.examPaper.create({
+        data: {
+          title: 'Unpublished Exam Paper',
+          subject: 'Economics',
+          program: 'BCOM',
+          branch: 'General',
+          year: 2024,
+          semester: 1,
+          type: 'PREVIOUS_YEAR',
+          fileUrl: `/uploads/exam-papers/unpub.pdf`,
+          uploadedById: librarianUser.id,
+          storageProvider: 'r2',
+          storageKey: 'exam-papers/unpub/dummy.pdf',
+          publishedAt: null, // UNPUBLISHED
+        },
+      });
+
+      let studentGateStatus = 200;
+      let studentGateJson = null;
+      const studentGateRes = {
+        status(code) {
+          studentGateStatus = code;
+          return this;
+        },
+        json(body) {
+          studentGateJson = body;
+          return this;
+        },
+      };
+      const studentReq = {
+        params: { id: unpublishedPaper.id },
+        user: { id: studentUser.id, role: 'STUDENT' },
+        query: {},
+        headers: {},
+      };
+
+      await downloadHandler(studentReq, studentGateRes);
+      assert(
+        studentGateStatus === 403,
+        `Student requesting unpublished paper is rejected with HTTP 403 (received: ${studentGateStatus})`
+      );
+      assert(
+        studentGateJson?.error?.includes('Forbidden'),
+        'Student rejection error explicitly mentions Forbidden'
+      );
+    } finally {
+      process.env.NODE_ENV = prevNodeEnvForDownload;
+      if (prevAllowLegacy !== undefined) {
+        process.env.ALLOW_LEGACY_LOCAL_SERVE = prevAllowLegacy;
+      } else {
+        delete process.env.ALLOW_LEGACY_LOCAL_SERVE;
+      }
+      delete process.env.ALLOW_LEGACY_LOCAL_STORAGE;
+    }
+
   } finally {
-    // Clean up temporary local directory
+    // Guaranteed data manager and temporary directory cleanup
+    try {
+      await dataManager.cleanup();
+    } catch {}
     try {
       if (fs.existsSync(tempTestDir)) {
         fs.rmSync(tempTestDir, { recursive: true, force: true });

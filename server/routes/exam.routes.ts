@@ -8,9 +8,12 @@ import prisma, { authenticate, authorize, AuthRequest } from '../middleware/auth
 import { logAdminAction, AUDIT_ACTIONS } from '../lib/auditLogger.js';
 import {
   getDocumentStorageAdapter,
+  normalizeDocumentStorageProvider,
   validateExamPaperFile,
   ALLOWED_EXTENSIONS,
   MAX_EXAM_PAPER_BYTES,
+  LocalStorageDriver,
+  S3StorageDriver,
 } from '../lib/storage/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -246,26 +249,48 @@ router.get('/papers/:id/download', authenticate, async (req: AuthRequest, res: R
       return;
     }
 
-    const storageAdapter = getDocumentStorageAdapter(paper.storageProvider);
+    // Determine normalized storage provider
+    let normalizedProvider: 'r2' | 'local';
+    try {
+      normalizedProvider = normalizeDocumentStorageProvider(paper.storageProvider);
+    } catch {
+      normalizedProvider = 'local';
+    }
 
     // 1. Cloudflare R2 / S3 Presigned URL Redirection
-    if (
-      storageAdapter.getSignedDownloadUrl &&
-      (paper.storageProvider === 'r2' || paper.storageProvider === 's3')
-    ) {
-      const storageKey = paper.storageKey || paper.fileUrl;
-      const signedUrl = await storageAdapter.getSignedDownloadUrl(storageKey, 60);
-      if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
-        res.json({ downloadUrl: signedUrl, expiresInSeconds: 60 });
+    if (normalizedProvider === 'r2') {
+      const storageAdapter = getDocumentStorageAdapter('r2');
+      if (storageAdapter.getSignedDownloadUrl) {
+        const storageKey = paper.storageKey || paper.fileUrl;
+        const signedUrl = await storageAdapter.getSignedDownloadUrl(storageKey, 60);
+        if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
+          res.json({ downloadUrl: signedUrl, expiresInSeconds: 60 });
+          return;
+        }
+        res.redirect(302, signedUrl);
         return;
       }
-      res.redirect(302, signedUrl);
+    }
+
+    // 2. Legacy Local Storage Provider
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowLegacyLocal =
+      process.env.ALLOW_LEGACY_LOCAL_SERVE === 'true' ||
+      process.env.ALLOW_LEGACY_LOCAL_STORAGE === 'true';
+
+    if (isProduction && !allowLegacyLocal) {
+      res.status(409).json({
+        error: 'LEGACY_STORAGE_UNMIGRATED',
+        message:
+          'This examination paper is stored on legacy local storage and cannot be served in production until migrated to cloud object storage. Please contact the library administrator.',
+        paperId: paper.id,
+      });
       return;
     }
 
-    // 2. Local Storage Driver / Stream Serving
+    const localStorageAdapter = new LocalStorageDriver();
     const storageKey = paper.storageKey || paper.fileUrl;
-    const storedObject = await storageAdapter.get(storageKey);
+    const storedObject = await localStorageAdapter.get(storageKey);
 
     if (storedObject) {
       const mime = paper.mimeType || storedObject.mimeType || 'application/pdf';
@@ -394,8 +419,10 @@ router.post(
         console.warn('Legacy disk mirror failed (non-fatal in cloud mode):', legacyDiskErr);
       }
 
-      const storageProvider =
-        process.env.STORAGE_DRIVER === 'r2' || process.env.STORAGE_DRIVER === 's3' ? 'r2' : 'local';
+      const storageProvider: 'r2' | 'local' =
+        storageAdapter instanceof S3StorageDriver
+          ? 'r2'
+          : normalizeDocumentStorageProvider(process.env.STORAGE_DRIVER || 'local');
 
       // Publication Policy:
       // - Librarians can publish immediately if requested via publish=true, or default to published
@@ -588,12 +615,23 @@ router.delete(
         return;
       }
 
-      const storageAdapter = getDocumentStorageAdapter(paper.storageProvider);
+      let normalizedProvider: 'r2' | 'local';
+      try {
+        normalizedProvider = normalizeDocumentStorageProvider(paper.storageProvider);
+      } catch {
+        normalizedProvider = 'local';
+      }
 
       // Clean up cloud / storage adapter object
       if (paper.storageKey) {
         try {
-          await storageAdapter.delete(paper.storageKey);
+          if (normalizedProvider === 'r2') {
+            const storageAdapter = getDocumentStorageAdapter('r2');
+            await storageAdapter.delete(paper.storageKey);
+          } else {
+            const storageAdapter = new LocalStorageDriver();
+            await storageAdapter.delete(paper.storageKey);
+          }
         } catch (storageErr) {
           console.warn('Storage adapter delete error:', storageErr);
         }

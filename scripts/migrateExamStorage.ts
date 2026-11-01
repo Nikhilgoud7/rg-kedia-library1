@@ -39,7 +39,8 @@ async function main() {
       console.log('\n[2/2] Simulating cloud migration (DRY-RUN mode)...');
       const dryResult = await executeExamStorageMigration({ dryRun: true });
       console.log(`- Candidates evaluated:         ${dryResult.totalCandidates}`);
-      console.log(`- Simulated successes:          ${dryResult.migratedSuccessfully}`);
+      console.log(`- Simulated candidates:         ${dryResult.simulatedCandidates ?? 0}`);
+      console.log(`- Files actually migrated:      ${dryResult.migratedSuccessfully}`);
       console.log(`- Skipped records:              ${dryResult.skipped}`);
       console.log(`- Simulated failures:           ${dryResult.failed}`);
       console.log('\nDry-run completed successfully with ZERO persistent changes.');

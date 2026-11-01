@@ -66,34 +66,65 @@ export function getStorageAdapter(driverName?: string): StorageAdapter {
  * - Production requires an explicit cloud storage driver ('r2' or 's3').
  * - Production strictly forbids local filesystem storage ('local' or 'disk').
  */
-export function getDocumentStorageAdapter(driverName?: string): StorageAdapter {
-  if (activeDocumentStorageAdapter && !driverName) {
-    return activeDocumentStorageAdapter;
+/**
+ * Normalizes document storage provider aliases to canonical identifiers ('r2' or 'local').
+ * Rejects unsupported aliases. Preserves compatibility with existing 'r2' records.
+ */
+export function normalizeDocumentStorageProvider(provider?: string): 'r2' | 'local' {
+  const p = (provider || '').toLowerCase().trim();
+  if (p === 'r2' || p === 's3' || p === 'cloudflare') {
+    return 'r2';
   }
+  if (p === 'local' || p === 'disk') {
+    return 'local';
+  }
+  throw new Error(
+    `INVALID_STORAGE_PROVIDER: Unsupported storage provider '${provider}'. Valid providers are 'r2', 's3', 'cloudflare', 'local'.`
+  );
+}
 
+export function getDocumentStorageAdapter(driverName?: string): StorageAdapter {
   const isProduction = process.env.NODE_ENV === 'production';
   const rawDriver = driverName || process.env.STORAGE_DRIVER;
   const selectedDriver = (rawDriver || (isProduction ? 'r2' : 'local')).toLowerCase().trim();
 
+  // Production document safety enforcement:
+  // 1. Production strictly requires cloud object storage (r2, s3, cloudflare).
+  // 2. Production strictly forbids local filesystem storage (local, disk).
+  // 3. Database is never allowed for document storage.
+  // 4. No explicit driver argument can bypass this prohibition in production.
   if (isProduction) {
     if (!rawDriver || rawDriver.trim() === '') {
       throw new Error(
         'STORAGE_CONFIGURATION_ERROR: STORAGE_DRIVER environment variable is required in production. Must specify a valid cloud object storage provider (e.g. STORAGE_DRIVER=r2).'
       );
     }
-    if (selectedDriver === 'local' || selectedDriver === 'disk') {
+    if (selectedDriver === 'local' || selectedDriver === 'disk' || selectedDriver === 'database') {
       throw new Error(
-        'STORAGE_CONFIGURATION_ERROR: Local filesystem storage (STORAGE_DRIVER=local) is strictly forbidden in production. Container restarts on platforms like Render will destroy examination papers. Configure STORAGE_DRIVER=r2 with Cloudflare R2 credentials.'
+        `STORAGE_CONFIGURATION_ERROR: Local or database storage (driver='${selectedDriver}') is strictly forbidden in production. Container restarts on platforms like Render will destroy examination papers. Configure STORAGE_DRIVER=r2 with Cloudflare R2 credentials.`
       );
     }
+  }
+
+  if (activeDocumentStorageAdapter && !driverName) {
+    if (isProduction && activeDocumentStorageAdapter instanceof LocalStorageDriver) {
+      throw new Error(
+        'STORAGE_CONFIGURATION_ERROR: Local filesystem storage is strictly forbidden in production.'
+      );
+    }
+    return activeDocumentStorageAdapter;
   }
 
   switch (selectedDriver) {
     case 'local':
     case 'disk':
-    case 'database':
       activeDocumentStorageAdapter = new LocalStorageDriver();
       return activeDocumentStorageAdapter;
+
+    case 'database':
+      throw new Error(
+        "INVALID_STORAGE_DRIVER: Document storage does not support 'database'. Valid drivers are: 'local', 'r2', 's3'."
+      );
 
     case 'r2':
     case 's3':
