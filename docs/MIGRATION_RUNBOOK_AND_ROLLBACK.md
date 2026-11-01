@@ -16,9 +16,9 @@ This operational runbook establishes the formal protocols, technical mechanics, 
 > [!CAUTION]
 > **STRICT REPOSITORY SAFETY MANDATE**:
 > 1. **No Real Data Ingestion**: No actual student, teacher, or administrative records may be ingested, processed, or loaded until the user explicitly delivers the authorized command `"APPROVE PHASE 9"` accompanied by the designated external filesystem directory path.
-> 2. **Production Database Prohibition**: The application production database (`ep-aged-sunset-b3548him-pooler`) must NEVER be connected to, migrated, altered, or restored during Phase 9 development or verification.
+> 2. **Production Database Prohibition**: The application production database (the production endpoint) must NEVER be connected to, migrated, altered, or restored during Phase 9 development or verification.
 > 3. **Isolated Test Database Only**: All dry-runs, simulations, and rollback drills must execute strictly against the approved isolated Neon test compute endpoint:
->    `ep-autumn-sky-b3vpykh4.c-4.ap-southeast-1.aws.neon.tech`
+>    the isolated test branch
 > 4. **Fail-Closed Allowlist Guard**: The positive target allowlist (`validateRestoreDatabaseTarget`) is active across all migration engines, preventing accidental connection to unknown or production endpoints.
 
 ---
@@ -95,7 +95,7 @@ npm run migration:simulate -- --generate-synthetic=50 --json
 The Migration Simulation Engine validates the end-to-end operational path using synthetic fixtures against the isolated Neon test branch.
 
 ### Execution Lifecycle
-1. **Target Allowlist Gate**: Rejects any target URL not matching `ep-autumn-sky-b3vpykh4`, `localhost`, or `127.0.0.1`.
+1. **Target Allowlist Gate**: Rejects any target URL not matching the isolated test branch, `localhost`, or `127.0.0.1`.
 2. **Staging Dry-Run Pre-Flight**: Runs `executeStagingDryRun`. If status is `BLOCKED`, aborts immediately without attempting database writes.
 3. **Pre-Migration Encrypted Backup**:
    - Mandated unless explicitly skipped (`skipPreBackup: true`).

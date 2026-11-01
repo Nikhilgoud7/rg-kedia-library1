@@ -103,7 +103,7 @@ Phase 11 delivers an institutional-grade **Library Operations & Statutory Audit 
 3. **Discrepancy Immutability Guarantee**:
    - Verified that once a discrepancy is transitioned to `CLOSED`, attempting to log new corrective actions or modify its status returns `HTTP 400 Bad Request`.
 4. **Zero Production Mutation**:
-   - All tests and verification were strictly conducted against the approved isolated Neon test branch (`ep-autumn-sky-b3vpykh4`).
+   - All tests and verification were strictly conducted against the approved isolated Neon test branch (the isolated test branch).
    - No production database migrations or demo account purges were executed.
 
 ---

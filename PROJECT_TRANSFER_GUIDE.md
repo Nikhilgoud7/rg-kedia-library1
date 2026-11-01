@@ -22,7 +22,7 @@ R.G. Kedia College of Commerce — Library Management System & Degree Exam Guide
 *   **Connection Architecture:**
     *   `DATABASE_URL`: Pooled connection (via PgBouncer) for application HTTP runtime traffic.
     *   `DATABASE_URL_UNPOOLED`: Direct connection for Prisma DDL migrations (`npx prisma migrate deploy`).
-    *   `TEST_DATABASE_URL`: Dedicated isolated Neon test branch endpoint (`ep-autumn-sky-b3vpykh4`), strictly separated from production.
+    *   `TEST_DATABASE_URL`: Dedicated isolated Neon test branch endpoint, strictly separated from production.
 *   **Cloud Object Storage:**
     *   Cloudflare R2 or Backblaze B2 (S3-compatible bucket) for past examination papers and study guides.
     *   Served via authenticated 60-second presigned URLs (`GET /api/exam/papers/:id/download`).

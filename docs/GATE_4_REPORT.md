@@ -66,7 +66,7 @@ Before any demo account can be considered for removal, `demoPurgeEngine.ts` exec
 
 #### 4. Safe, Transactional Purge Engine
 `executeDemoAccountPurge` enforces four defense-in-depth pre-flight gates before mutating the database:
-1. **Target Database Positive Allowlisting (`SEC-9F-01`)**: Rejects production databases, unknown hosts, and empty connection strings. Only approved test endpoints (`ep-autumn-sky-b3vpykh4.c-4.ap-southeast-1.aws.neon.tech` or explicit localhost test instances) are permitted.
+1. **Target Database Positive Allowlisting (`SEC-9F-01`)**: Rejects production databases, unknown hosts, and empty connection strings. Only approved test endpoints (the isolated test branch or explicit localhost test instances) are permitted.
 2. **Pre-Purge Encrypted Backup Verification (`DR-9F-01`)**: Requires verification of a client-side AES-256-GCM encrypted backup (`RG_KEDIA_ENCRYPTED_BACKUP_V1`) created within the last 60 minutes, authenticated with a valid 64-character hexadecimal key (unless explicitly overridden with `--skip-backup` in staging drills).
 3. **Atomic Transaction Isolation**: All record deletions and audit log creation execute inside a single Prisma interactive transaction (`prisma.$transaction`, 60-second timeout). Any failure triggers automatic, instant rollback.
 4. **Audit Trail Recording**: Emits an administrative audit log event (`DEMO_ACCOUNTS_PURGED`) recording the purged user count, child record counts, and executing actor ID.
@@ -96,7 +96,7 @@ Following the independent read-only audit of Phase 9F, three conditions were rem
 
 > [!CAUTION]
 > **Production Demo Account Purge Has NOT Been Executed**
-> The demo account purge workflows, dry-run simulations, and active execution tests implemented in Phase 9F were executed **exclusively against the isolated Neon PostgreSQL test branch** (`ep-autumn-sky-b3vpykh4.c-4.ap-southeast-1.aws.neon.tech`). No connection to the live production database was established, and no production records were altered or deleted.
+> The demo account purge workflows, dry-run simulations, and active execution tests implemented in Phase 9F were executed **exclusively against the isolated Neon PostgreSQL test branch** (the isolated test branch). No connection to the live production database was established, and no production records were altered or deleted.
 
 > [!IMPORTANT]
 > **Strict Pre-Conditions for Future Real-Data Onboarding**

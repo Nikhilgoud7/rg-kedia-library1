@@ -15,10 +15,10 @@ This runbook defines operational responsibilities, recovery objectives, verifica
 ## 2. Infrastructure Capability Audit (Verified Provider Constraints)
 
 ### A. Neon Database (`free_v3` Plan)
-An inspection of the project configuration (`shy-haze-95283527`) confirmed the following capabilities:
+An inspection of the project configuration (isolated cloud environment) confirmed the following capabilities:
 - **Subscription Tier**: `free_v3` (Free Tier).
 - **History Retention (`history_retention_seconds`)**: `21,600 seconds` (**strictly 6 hours**).
-- **Point-in-Time Recovery (PITR)**: Instant restore is supported only within the 6-hour history window for root branches (such as `production` / `br-mute-term-b3q54934`).
+- **Point-in-Time Recovery (PITR)**: Instant restore is supported only within the 6-hour history window for root branches (such as `production`).
 - **Branching Quota**: Up to 10 total branches; 1 GiB logical storage limit per branch.
 - **Snapshots**:
   - Manual snapshots: Limited to **1 manual snapshot** on the Free plan.
@@ -113,13 +113,13 @@ Restoration operations are 100% transactional. All table cleanups (`deleteMany`)
    Determine the exact UTC timestamp immediately before the incident occurred (e.g., `2026-10-24T14:30:00Z`).
 2. **Execute Neon Time-Travel Restore**:
    - In Neon Console (or via Neon CLI / MCP):
-     - Navigate to Project `shy-haze-95283527` -> **Branches** -> `production`.
+     - Navigate to Project -> **Branches** -> `production`.
      - Select **Restore from history** -> **Time Travel**.
      - Specify the target timestamp or LSN.
      - Complete restore. Both the restored branch and backup branch become separate root branches.
    - Alternatively, create a recovery branch from the timestamp:
      ```bash
-     neon branch create --project-id shy-haze-95283527 --name recovery-branch --parent production --timestamp "2026-10-24T14:30:00Z"
+     neon branch create --project-id <project-id> --name recovery-branch --parent production --timestamp "2026-10-24T14:30:00Z"
      ```
 3. **Verify Database Sanity**:
    Run smoke checks against the recovered branch.

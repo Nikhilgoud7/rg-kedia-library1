@@ -234,7 +234,7 @@ The migration tooling provides three operational execution modes:
 
 ## Task 8: Full Regression Verification
 
-Every test suite was executed against the isolated Neon PostgreSQL test branch (`ep-autumn-sky-b3vpykh4`).
+Every test suite was executed against the isolated Neon PostgreSQL test branch (the isolated test branch).
 
 ### 8.1 Complete Test Suite Results (45 Suites, 2,295 Assertions)
 

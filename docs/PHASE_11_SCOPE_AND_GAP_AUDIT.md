@@ -25,7 +25,7 @@ The RG-Kedia Library Management System has successfully reached the completion o
    - Backend TypeScript (`npm run build:server` / `tsc`): 0 errors, exit code 0.
    - Frontend TypeScript (`npx --prefix client tsc -b`): 0 errors, exit code 0.
 4. **Automated Regression Health**:
-   - All 37 existing regression test suites and 2,009 assertions verified clean against the dedicated Neon PostgreSQL test endpoint (`ep-autumn-sky-b3vpykh4`).
+   - All 37 existing regression test suites and 2,009 assertions verified clean against the isolated test branch.
    - Zero test failures, zero regressions.
 
 Phase 11 establishes a comprehensive, accountable **Library Audit Management Subsystem** designed exclusively for the College Librarian to plan, conduct, track, reconcile, and document:
@@ -215,7 +215,7 @@ model AuditCorrectiveAction {
 - **Goal**: Establish the core audit domain, database models, lifecycle state machine, and librarian audit dashboard.
 - **Deliverables**:
   - Add `LibraryAudit` and related models in `prisma/schema.prisma`.
-  - Timestamped migration created and applied to isolated Neon test branch (`ep-autumn-sky-b3vpykh4`).
+  - Timestamped migration created and applied to the isolated test branch.
   - `server/services/auditService.ts`: Audit creation, validation, lifecycle state transitions, duplicate prevention, and dashboard metrics.
   - `server/routes/auditRoutes.ts`: Endpoints protected with `authenticate` and `authorize('LIBRARIAN')`.
   - Frontend: `client/src/pages/librarian/audits/AuditDashboard.tsx`, routes in `App.tsx`, sidebar navigation in `Sidebar.tsx`.

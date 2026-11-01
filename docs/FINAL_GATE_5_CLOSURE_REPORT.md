@@ -57,7 +57,7 @@ A review of historical project documentation identified that `docs/BUILD_STATE.m
 
 ## 4. Regression Test Results
 
-The authoritative regression runner (`node tests/runner.js --allow-tests`) was executed against the isolated Neon test branch (`ep-autumn-sky-b3vpykh4`).
+The authoritative regression runner (`node tests/runner.js --allow-tests`) was executed against the isolated Neon test branch (the isolated test branch).
 
 - **Total Registered Suites**: 37 / 37 executed
 - **Total Assertions**: 2,009
