@@ -46,7 +46,13 @@ if (TRUST_PROXY !== undefined) {
 
 // Middleware
 app.use(cors({
-  origin: CLIENT_URL,
+  origin: (origin, callback) => {
+    if (!origin || origin === CLIENT_URL || process.env.VERCEL || origin.endsWith('.vercel.app') || origin.startsWith('http://localhost:')) {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
   credentials: true,
 }));
 app.use(cookieParser());
