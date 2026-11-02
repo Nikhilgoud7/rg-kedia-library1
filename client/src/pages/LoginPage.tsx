@@ -124,7 +124,7 @@ export const LoginPage: React.FC = () => {
 
           {/* Right Column: Interactive Login Card */}
           <div className="lg:col-span-6 max-w-md w-full mx-auto">
-            <div className="bg-white rounded-3xl p-7 shadow-2xl border border-slate-100 relative">
+            <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-100 relative">
               
               {/* Tab Selector */}
               <div className="flex rounded-xl bg-slate-100 p-1 mb-6">
@@ -213,7 +213,7 @@ export const LoginPage: React.FC = () => {
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                   <span>Verified Demo Profiles (Click to test)</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => handleDemoFill('librarian@rgkedia.edu.in', 'admin123', 'FACULTY')}

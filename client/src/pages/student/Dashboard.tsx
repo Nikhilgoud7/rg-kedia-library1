@@ -158,7 +158,7 @@ export const StudentDashboard: React.FC = () => {
       {/* Student Welcome Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-amber-950 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-amber-400 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/15">
               Roll No: {user?.rollNumber || 'Student'}
             </span>
@@ -223,7 +223,7 @@ export const StudentDashboard: React.FC = () => {
       )}
 
       {/* Quick Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Currently Borrowed"
           value={borrowedBooks.length}

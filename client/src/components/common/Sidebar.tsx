@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -19,10 +19,39 @@ import {
   ShieldCheck,
   BarChart3,
   ClipboardCheck,
+  X,
 } from 'lucide-react';
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const { user } = useAuth();
+
+  // Prevent background scrolling on mobile when drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Support Escape key to close drawer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const getNavItems = () => {
     switch (user?.role) {
@@ -68,13 +97,25 @@ export const Sidebar: React.FC = () => {
 
   const navItems = getNavItems();
 
-  return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 min-h-[calc(100vh-4rem)]">
+  const renderNavContent = (isMobile = false) => (
+    <div className="flex flex-col h-full">
       {/* College Info Header */}
       <div className="p-5 border-b border-slate-800/80">
-        <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          <Layers className="w-4 h-4 text-amber-400" />
-          <span>UG Library Portal</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span>UG Library Portal</span>
+          </div>
+          {isMobile && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close navigation drawer"
+              className="p-1.5 -mr-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
         <div className="mt-2 text-xs text-slate-400 font-medium leading-relaxed">
           {user?.role === 'STUDENT' && (
@@ -100,7 +141,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -108,6 +149,11 @@ export const Sidebar: React.FC = () => {
               key={item.to}
               to={item.to}
               end={item.to.split('/').length <= 2}
+              onClick={() => {
+                if (isMobile && onClose) {
+                  onClose();
+                }
+              }}
               className={({ isActive }) =>
                 `flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
                   isActive
@@ -124,7 +170,7 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* Footer / Sanskrit Motto */}
-      <div className="p-4 border-t border-slate-800 text-center">
+      <div className="p-4 border-t border-slate-800 text-center shrink-0">
         <p className="text-[11px] font-serif text-amber-300/80 tracking-wide">
           " सा विद्या या विमुक्तये "
         </p>
@@ -132,7 +178,33 @@ export const Sidebar: React.FC = () => {
           Knowledge is that which liberates
         </p>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* 1. Desktop Persistent Sidebar (>= lg: 1024px) */}
+      <aside className="hidden lg:flex w-64 bg-slate-900 text-slate-300 flex-col shrink-0 min-h-[calc(100vh-4rem)]">
+        {renderNavContent(false)}
+      </aside>
+
+      {/* 2. Mobile Slide-Over Navigation Drawer (< lg: 1024px) */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" aria-modal="true" role="dialog">
+          {/* Dark Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={onClose}
+            aria-hidden="true"
+          />
+
+          {/* Drawer Panel */}
+          <div className="fixed inset-y-0 left-0 max-w-[85vw] w-72 bg-slate-900 text-slate-300 shadow-2xl z-50 flex flex-col h-full transform transition ease-in-out duration-300 animate-in slide-in-from-left">
+            {renderNavContent(true)}
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

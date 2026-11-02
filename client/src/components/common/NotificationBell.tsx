@@ -137,7 +137,7 @@ export const NotificationBell: React.FC = () => {
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-white shadow-xl ring-1 ring-slate-900/10 z-50 overflow-hidden">
+          <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-96 rounded-xl bg-white shadow-xl ring-1 ring-slate-900/10 z-50 overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50">
               <h3 className="font-bold text-sm text-slate-800">Notifications</h3>
               {unreadCount > 0 && (
