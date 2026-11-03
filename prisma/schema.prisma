@@ -26,6 +26,11 @@ model User {
   semester       Int?     // 1-6
   secondLanguage String?  // TELUGU | SANSKRIT | ARABIC | HINDI
   phone               String?
+  gender              String?   // MALE | FEMALE | OTHER
+  approvalStatus      String    @default("APPROVED") // PENDING | APPROVED | REJECTED
+  approvedAt          DateTime?
+  approvedById        String?
+  rejectionReason     String?
   active              Boolean   @default(true)
   mustChangePassword  Boolean   @default(false)
   failedLoginAttempts Int       @default(0)
@@ -42,6 +47,9 @@ model User {
   auditsLed              LibraryAudit[]
   inventoryScans         InventoryAuditScan[]
   auditActionsPerformed  AuditCorrectiveAction[]
+
+  @@index([approvalStatus])
+  @@index([role, approvalStatus])
 }
 
 // ─── Books ──────────────────────────────────────────────

@@ -77,6 +77,7 @@
     "test:audit-route": "node tests/runner.js --allow-tests --suite=auditRoute",
     "test:bootstrap": "node tests/runner.js --allow-tests --suite=librarianBootstrap",
     "test:roster": "node tests/runner.js --allow-tests --suite=studentRosterImport",
+    "test:registration": "node tests/runner.js --allow-tests --suite=registrationApproval",
     "test:audit-all": "node tests/runner.js --allow-tests --suite=auditFoundation,auditMonthlyQuarterly,auditPhysicalInventory,auditDiscrepancyManagement,auditAnnualInstitutional,auditFinalIntegration,auditRoute"
   },
   "dependencies": {

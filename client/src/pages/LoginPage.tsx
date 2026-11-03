@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, ShieldCheck, GraduationCap, UserCheck, Key, ArrowRight, Sparkles } from 'lucide-react';
+import { BookOpen, ShieldCheck, GraduationCap, UserCheck, Key, ArrowRight, Sparkles, Clock, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
@@ -12,6 +12,7 @@ export const LoginPage: React.FC = () => {
   const [identifier, setIdentifier] = useState('1052-24-401-001'); // default student roll
   const [password, setPassword] = useState('password123');
   const [isLoading, setIsLoading] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<{ type: 'PENDING' | 'REJECTED'; message: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +43,22 @@ export const LoginPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      toast.error(err.response?.data?.error || 'Failed to login. Please check credentials.');
+      const code = err.response?.data?.code;
+      const errorMsg = err.response?.data?.error || 'Failed to login. Please check credentials.';
+      if (code === 'REGISTRATION_PENDING') {
+        setStatusNotice({
+          type: 'PENDING',
+          message: errorMsg,
+        });
+      } else if (code === 'REGISTRATION_REJECTED') {
+        setStatusNotice({
+          type: 'REJECTED',
+          message: errorMsg,
+        });
+      } else {
+        setStatusNotice(null);
+      }
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -162,6 +178,30 @@ export const LoginPage: React.FC = () => {
                 </button>
               </div>
 
+              {statusNotice && (
+                <div
+                  className={`mb-4 p-3.5 rounded-xl border text-xs leading-relaxed flex items-start gap-2.5 ${
+                    statusNotice.type === 'PENDING'
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  {statusNotice.type === 'PENDING' ? (
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <div className="font-bold mb-0.5">
+                      {statusNotice.type === 'PENDING'
+                        ? 'Registration Awaiting Librarian Approval'
+                        : 'Registration Rejected'}
+                    </div>
+                    <div>{statusNotice.message}</div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -206,6 +246,31 @@ export const LoginPage: React.FC = () => {
                   )}
                 </button>
               </form>
+
+              {/* Self-Registration Section */}
+              <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+                <div className="text-xs text-slate-600 font-medium mb-2.5">
+                  New student or faculty member without an account?
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/register?type=student')}
+                    className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <GraduationCap className="w-4 h-4 text-amber-700" />
+                    <span>Student Self-Registration →</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/register?type=teacher')}
+                    className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <UserCheck className="w-4 h-4 text-blue-700" />
+                    <span>Faculty Self-Registration →</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Demo Account Quick-Fill Buttons */}
               <div className="mt-6 pt-5 border-t border-slate-100">

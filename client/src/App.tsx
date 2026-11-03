@@ -9,12 +9,14 @@ import Sidebar from './components/common/Sidebar';
 
 import DemoBanner from './components/common/DemoBanner';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import MandatoryPasswordChangePage from './pages/MandatoryPasswordChangePage';
 
 // Librarian Pages
 import LibrarianDashboard from './pages/librarian/Dashboard';
 import ManageBooks from './pages/librarian/ManageBooks';
 import ManageUsers from './pages/librarian/ManageUsers';
+import RegistrationRequests from './pages/librarian/RegistrationRequests';
 import LendingRequests from './pages/librarian/LendingRequests';
 import IssuedBooks from './pages/librarian/IssuedBooks';
 import ManageExamGuide from './pages/librarian/ManageExamGuide';
@@ -137,6 +139,9 @@ export const App: React.FC = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/register/student" element={<RegisterPage defaultTab="STUDENT" />} />
+          <Route path="/register/teacher" element={<RegisterPage defaultTab="TEACHER" />} />
           <Route path="/change-password" element={<MandatoryPasswordChangePage />} />
           <Route path="/" element={<RootRedirect />} />
 
@@ -162,6 +167,14 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['LIBRARIAN']}>
                 <ManageUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/librarian/registrations"
+            element={
+              <ProtectedRoute allowedRoles={['LIBRARIAN']}>
+                <RegistrationRequests />
               </ProtectedRoute>
             }
           />

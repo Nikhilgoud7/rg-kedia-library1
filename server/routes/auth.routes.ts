@@ -47,6 +47,25 @@ router.post('/login', loginLimiter, async (req, res: Response): Promise<void> =>
       return;
     }
 
+    if (user.approvalStatus === 'PENDING') {
+      res.status(403).json({
+        error: 'Your account registration is awaiting librarian approval. You will be able to log in after your application has been approved.',
+        code: 'REGISTRATION_PENDING',
+      });
+      return;
+    }
+
+    if (user.approvalStatus === 'REJECTED') {
+      res.status(403).json({
+        error: user.rejectionReason
+          ? `Your registration was rejected: ${user.rejectionReason}. Please contact the librarian.`
+          : 'Your registration was rejected. Please contact the librarian.',
+        code: 'REGISTRATION_REJECTED',
+        rejectionReason: user.rejectionReason,
+      });
+      return;
+    }
+
     if (!user.active) {
       res.status(403).json({ error: 'Account is deactivated. Contact the librarian.' });
       return;
@@ -218,6 +237,201 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response): 
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Server error during registration.' });
+  }
+});
+
+
+// Rate limiter for self-registration: max 15 requests per 15 minutes per IP
+const registrationLimiter = rateLimit({
+  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: { error: 'Too many registration attempts from this IP. Please try again after 15 minutes.' },
+  skip: () => process.env.NODE_ENV === 'test' || process.env.ALLOW_TESTS === 'true',
+});
+
+// Helper for validating email format
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// POST /api/auth/register/student - Self-registration for students
+router.post('/register/student', registrationLimiter, async (req, res: Response): Promise<void> => {
+  try {
+    const { name, email, rollNumber, program, branch, semester, gender, phone, password, confirmPassword } = req.body;
+
+    if (!name || !name.trim()) {
+      res.status(400).json({ error: 'Full name is required.' });
+      return;
+    }
+    if (!email || !isValidEmail(email.trim())) {
+      res.status(400).json({ error: 'A valid email address is required.' });
+      return;
+    }
+    if (!rollNumber || !rollNumber.trim()) {
+      res.status(400).json({ error: 'Roll number / Hall ticket number is required.' });
+      return;
+    }
+    if (!program || !program.trim()) {
+      res.status(400).json({ error: 'Course/Program is required.' });
+      return;
+    }
+    const parsedSemester = parseInt(semester, 10);
+    if (isNaN(parsedSemester) || parsedSemester < 1 || parsedSemester > 6) {
+      res.status(400).json({ error: 'Semester must be a number between 1 and 6.' });
+      return;
+    }
+    const normalizedGender = (gender || '').trim().toUpperCase();
+    if (!['MALE', 'FEMALE', 'OTHER'].includes(normalizedGender)) {
+      res.status(400).json({ error: 'Gender must be Male or Female.' });
+      return;
+    }
+    if (!password || password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+      return;
+    }
+    if (password !== confirmPassword) {
+      res.status(400).json({ error: 'Password and confirm password do not match.' });
+      return;
+    }
+
+    // Uniqueness checks
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedRoll = rollNumber.trim().toUpperCase();
+
+    const existingEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingEmail) {
+      res.status(409).json({ error: 'An account with this email address already exists.' });
+      return;
+    }
+
+    const existingRoll = await prisma.user.findUnique({ where: { rollNumber: normalizedRoll } });
+    if (existingRoll) {
+      res.status(409).json({ error: 'This roll number is already registered.' });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const user = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
+        role: 'STUDENT',
+        rollNumber: normalizedRoll,
+        program: program.trim().toUpperCase(),
+        branch: branch ? branch.trim() : null,
+        semester: parsedSemester,
+        year: Math.ceil(parsedSemester / 2),
+        gender: normalizedGender,
+        phone: phone ? phone.trim() : null,
+        active: false,
+        approvalStatus: 'PENDING',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        rollNumber: true,
+        program: true,
+        branch: true,
+        semester: true,
+        gender: true,
+        approvalStatus: true,
+        createdAt: true,
+      },
+    });
+
+    res.status(201).json({
+      message: 'Student registration submitted successfully. Your account is pending librarian approval.',
+      user,
+    });
+  } catch (error) {
+    console.error('Student registration error:', error);
+    res.status(500).json({ error: 'Server error during student registration.' });
+  }
+});
+
+// POST /api/auth/register/teacher - Self-registration for teachers
+router.post('/register/teacher', registrationLimiter, async (req, res: Response): Promise<void> => {
+  try {
+    const { name, email, program, branch, gender, phone, password, confirmPassword } = req.body;
+
+    if (!name || !name.trim()) {
+      res.status(400).json({ error: 'Full name is required.' });
+      return;
+    }
+    if (!email || !isValidEmail(email.trim())) {
+      res.status(400).json({ error: 'A valid email address is required.' });
+      return;
+    }
+    if (!program || !program.trim()) {
+      res.status(400).json({ error: 'Department / Program is required.' });
+      return;
+    }
+    const normalizedGender = (gender || '').trim().toUpperCase();
+    if (!['MALE', 'FEMALE', 'OTHER'].includes(normalizedGender)) {
+      res.status(400).json({ error: 'Gender must be Male or Female.' });
+      return;
+    }
+    if (!password || password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+      return;
+    }
+    if (password !== confirmPassword) {
+      res.status(400).json({ error: 'Password and confirm password do not match.' });
+      return;
+    }
+
+    // Critical: Teachers do NOT need or use Staff ID, rollNumber, or semester.
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingEmail) {
+      res.status(409).json({ error: 'An account with this email address already exists.' });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const user = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
+        role: 'TEACHER',
+        program: program.trim(),
+        branch: branch ? branch.trim() : null,
+        gender: normalizedGender,
+        phone: phone ? phone.trim() : null,
+        active: false,
+        approvalStatus: 'PENDING',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        program: true,
+        branch: true,
+        gender: true,
+        approvalStatus: true,
+        createdAt: true,
+      },
+    });
+
+    res.status(201).json({
+      message: 'Teacher registration submitted successfully. Your account is pending librarian approval.',
+      user,
+    });
+  } catch (error) {
+    console.error('Teacher registration error:', error);
+    res.status(500).json({ error: 'Server error during teacher registration.' });
   }
 });
 

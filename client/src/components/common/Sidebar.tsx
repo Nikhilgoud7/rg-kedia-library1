@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   BarChart3,
   ClipboardCheck,
+  UserCheck,
   X,
 } from 'lucide-react';
 
@@ -65,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           { to: '/librarian/issued', label: 'Issued Books & Returns', icon: CheckSquare },
           { to: '/librarian/exam-guide', label: 'Exam Guide & Papers', icon: FileText },
           { to: '/librarian/users', label: 'Student & Faculty Users', icon: Users },
+          { to: '/librarian/registrations', label: 'Registration Requests', icon: UserCheck },
           { to: '/librarian/audit-logs', label: 'Audit Trail', icon: ShieldCheck },
           { to: '/librarian/notifications', label: 'Notifications', icon: Bell },
           { to: '/librarian/profile', label: 'My Profile', icon: UserCircle },

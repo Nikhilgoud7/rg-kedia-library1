@@ -436,6 +436,253 @@ router.delete('/users/:id', authenticate, authorize('LIBRARIAN'), async (req: Au
   }
 });
 
+// GET /api/admin/registrations - List registration applications (Librarian only)
+router.get(
+  '/registrations',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { status, role, search } = req.query;
+
+      const where: any = {};
+
+      if (status && typeof status === 'string' && status !== 'ALL') {
+        where.approvalStatus = status.trim().toUpperCase();
+      }
+
+      if (role && typeof role === 'string' && role !== 'ALL') {
+        where.role = role.trim().toUpperCase();
+      }
+
+      if (search && typeof search === 'string') {
+        const trimmed = search.trim();
+        if (trimmed.length > 0) {
+          where.OR = [
+            { name: { contains: trimmed, mode: 'insensitive' } },
+            { email: { contains: trimmed, mode: 'insensitive' } },
+            { rollNumber: { contains: trimmed, mode: 'insensitive' } },
+          ];
+        }
+      }
+
+      const [registrations, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+        prisma.user.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            rollNumber: true,
+            program: true,
+            branch: true,
+            semester: true,
+            gender: true,
+            phone: true,
+            approvalStatus: true,
+            approvedAt: true,
+            approvedById: true,
+            rejectionReason: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.user.count({ where: { approvalStatus: 'PENDING' } }),
+        prisma.user.count({ where: { approvalStatus: 'APPROVED' } }),
+        prisma.user.count({ where: { approvalStatus: 'REJECTED' } }),
+      ]);
+
+      // Resolve approving librarian details
+      const librarianIds = [...new Set(registrations.map((r) => r.approvedById).filter(Boolean))] as string[];
+      let libMap = new Map<string, { id: string; name: string; email: string }>();
+      if (librarianIds.length > 0) {
+        const librarians = await prisma.user.findMany({
+          where: { id: { in: librarianIds } },
+          select: { id: true, name: true, email: true },
+        });
+        libMap = new Map(librarians.map((l) => [l.id, l]));
+      }
+
+      const formattedRegistrations = registrations.map((reg) => ({
+        ...reg,
+        approvedBy: reg.approvedById ? libMap.get(reg.approvedById) || null : null,
+      }));
+
+      res.json({
+        registrations: formattedRegistrations,
+        counts: {
+          pending: pendingCount,
+          approved: approvedCount,
+          rejected: rejectedCount,
+          total: pendingCount + approvedCount + rejectedCount,
+        },
+      });
+    } catch (error) {
+      console.error('List registrations error:', error);
+      res.status(500).json({ error: 'Server error retrieving registration applications.' });
+    }
+  }
+);
+
+// PUT /api/admin/registrations/:id/approve - Approve registration application
+router.put(
+  '/registrations/:id/approve',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const targetUser = await prisma.user.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!targetUser) {
+        res.status(404).json({ error: 'Registration application not found.' });
+        return;
+      }
+
+      if (targetUser.approvalStatus === 'APPROVED' && targetUser.active) {
+        res.status(400).json({ error: 'Registration is already approved and active.' });
+        return;
+      }
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: { id: targetUser.id },
+          data: {
+            approvalStatus: 'APPROVED',
+            active: true,
+            approvedAt: new Date(),
+            approvedById: req.user!.id,
+            rejectionReason: null,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            rollNumber: true,
+            program: true,
+            branch: true,
+            semester: true,
+            gender: true,
+            approvalStatus: true,
+            approvedAt: true,
+            approvedById: true,
+            active: true,
+          },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.USER_REGISTRATION_APPROVED,
+          targetId: targetUser.id,
+          details: {
+            name: targetUser.name,
+            email: targetUser.email,
+            role: targetUser.role,
+            rollNumber: targetUser.rollNumber,
+          },
+          tx,
+        });
+
+        return updated;
+      });
+
+      res.json({
+        message: 'Registration approved successfully.',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Approve registration error:', error);
+      res.status(500).json({ error: 'Server error approving registration.' });
+    }
+  }
+);
+
+// PUT /api/admin/registrations/:id/reject - Reject registration application
+router.put(
+  '/registrations/:id/reject',
+  authenticate,
+  authorize('LIBRARIAN'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { reason } = req.body;
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!targetUser) {
+        res.status(404).json({ error: 'Registration application not found.' });
+        return;
+      }
+
+      if (DEMO_MODE && targetUser.email.toLowerCase().endsWith('@demo.rgkedia.local')) {
+        res.status(403).json({ error: 'Rejecting demo accounts is prohibited in DEMO_MODE.' });
+        return;
+      }
+
+      if (targetUser.role === 'LIBRARIAN') {
+        res.status(400).json({ error: 'Cannot reject librarian accounts.' });
+        return;
+      }
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+          where: { id: targetUser.id },
+          data: {
+            approvalStatus: 'REJECTED',
+            active: false,
+            approvedAt: new Date(),
+            approvedById: req.user!.id,
+            rejectionReason: reason && typeof reason === 'string' ? reason.trim() : null,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            rollNumber: true,
+            program: true,
+            branch: true,
+            gender: true,
+            approvalStatus: true,
+            approvedAt: true,
+            approvedById: true,
+            rejectionReason: true,
+            active: true,
+          },
+        });
+
+        await logAdminAction({
+          actorId: req.user!.id,
+          action: AUDIT_ACTIONS.USER_REGISTRATION_REJECTED,
+          targetId: targetUser.id,
+          details: {
+            name: targetUser.name,
+            email: targetUser.email,
+            role: targetUser.role,
+            reason: reason ? String(reason).trim() : null,
+          },
+          tx,
+        });
+
+        return updated;
+      });
+
+      res.json({
+        message: 'Registration rejected.',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Reject registration error:', error);
+      res.status(500).json({ error: 'Server error rejecting registration.' });
+    }
+  }
+);
+
 // GET /api/admin/audit-logs - List audit logs (Librarian only)
 router.get(
   '/audit-logs',

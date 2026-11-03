@@ -16,6 +16,11 @@ export interface User {
   semester?: number | null;
   secondLanguage?: SecondLanguage | null;
   phone?: string | null;
+  gender?: string | null;
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  approvedAt?: string | null;
+  approvedById?: string | null;
+  rejectionReason?: string | null;
   active: boolean;
   mustChangePassword?: boolean;
   createdAt: string;

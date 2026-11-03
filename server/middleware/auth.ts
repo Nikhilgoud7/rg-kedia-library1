@@ -14,6 +14,7 @@ export interface AuthRequest extends Request {
     program?: string | null;
     branch?: string | null;
     mustChangePassword?: boolean;
+    approvalStatus?: string;
   };
 }
 
@@ -47,10 +48,10 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true, tokenVersion: true, mustChangePassword: true },
+      select: { id: true, name: true, email: true, role: true, program: true, branch: true, active: true, tokenVersion: true, mustChangePassword: true, approvalStatus: true },
     });
 
-    if (!user || !user.active) {
+    if (!user || !user.active || user.approvalStatus !== 'APPROVED') {
       res.status(401).json({ error: 'User not found or deactivated.' });
       return;
     }
