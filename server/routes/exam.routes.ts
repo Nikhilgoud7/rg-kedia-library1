@@ -21,6 +21,9 @@ const __dirname = path.dirname(__filename);
 
 // Resolve project root directory safely across both development (server/) and production (dist/server/)
 function findProjectRoot(startDir: string): string {
+  if (process.env.VERCEL) {
+    return process.cwd();
+  }
   let current = startDir;
   while (current !== path.parse(current).root) {
     if (fs.existsSync(path.join(current, 'package.json'))) {
@@ -276,7 +279,8 @@ router.get('/papers/:id/download', authenticate, async (req: AuthRequest, res: R
     const isProduction = process.env.NODE_ENV === 'production';
     const allowLegacyLocal =
       process.env.ALLOW_LEGACY_LOCAL_SERVE === 'true' ||
-      process.env.ALLOW_LEGACY_LOCAL_STORAGE === 'true';
+      process.env.ALLOW_LEGACY_LOCAL_STORAGE === 'true' ||
+      !!process.env.VERCEL;
 
     if (isProduction && !allowLegacyLocal) {
       res.status(409).json({

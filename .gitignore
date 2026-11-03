@@ -7,6 +7,12 @@ dist/
 *.db-journal
 uploads/*
 !uploads/.gitkeep
+!uploads/exam-papers/
+uploads/exam-papers/*
+!uploads/exam-papers/8948e19c-1ab3-4c51-8110-c05e81ec2978/
+!uploads/exam-papers/8948e19c-1ab3-4c51-8110-c05e81ec2978/**
+!uploads/exam-papers/5bb49aca-1fb3-4c10-9466-ce2d97871541/
+!uploads/exam-papers/5bb49aca-1fb3-4c10-9466-ce2d97871541/**
 backups/*
 !backups/.gitkeep
 client/dist/
